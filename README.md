@@ -22,13 +22,29 @@
 
 - **GPU:** NVIDIA RTX 5090（或其他 Blackwell 架构 GPU）
 - **OS:** Ubuntu 22.04 / 24.04
-- **Python:** 3.10（Isaac Sim wheels 仅支持 cp310）
+- **Python:** 3.10（cap-x 本体）/ 3.11（Isaac Sim conda 环境）
 - **CUDA:** 12.4+
 - **驱动:** 建议 570+（Blackwell 架构支持）
 
 ## 安装
 
-使用 [uv](https://docs.astral.sh/uv/) 管理依赖。
+### 1. 安装 Isaac Sim 5.1（独立安装）
+
+Isaac Sim 5.1 独立安装在 `/opt/isaac-sim/`，带有 conda 环境 `behavior`（Python 3.11），OmniGibson 和 BDDL 已内置于该环境中。
+
+安装完成后，需要在 behavior 环境中补充 cap-x 适配所需的包（如 cuRobo、PyRoKi 等）。
+
+```bash
+# 激活 Isaac Sim 自带的 conda 环境
+source /opt/isaac-sim/setup_conda_env.sh
+
+# 补充安装 cap-x 适配包
+pip install <capx-required-packages>
+```
+
+### 2. 安装 cap-x 本体
+
+cap-x 本体使用 [uv](https://docs.astral.sh/uv/) 管理依赖（Python 3.10）。
 
 ```bash
 git clone --recurse-submodules <your-repo-url> && cd CaP-X-b1k
@@ -42,37 +58,13 @@ uv python install 3.10 && uv venv -p 3.10
 uv sync
 ```
 
-### BEHAVIOR + Isaac Sim 5.1 安装
-
-```bash
-cd capx/third_party/b1k
-./uv_install.sh --dataset --accept-dataset-tos
-cd ../../..
-```
-
-此命令会安装 OmniGibson、Isaac Sim 5.1、BDDL、cuRobo，并下载机器人资产、BEHAVIOR-1K 场景/物体资产及 2025 challenge 任务实例。
-
-> **注意：** 首次运行时 cuRobo 会 JIT 编译 CUDA kernel（适配 RTX 5090 的 Blackwell 架构），需要 **3-5 分钟**，属于正常现象。
-
-### 安装后修复
-
-```bash
-# 激活 b1k 虚拟环境
-source capx/third_party/b1k/.venv/bin/activate
-
-# 修复 cuRobo CUDA JIT 头文件
-cp capx/third_party/curobo/src/curobo/curobolib/cpp/*.h \
-   $(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")/curobo/curobolib/cpp/
-
-# 修复 Vulkan ICD 冲突（多 GPU 系统可能 segfault）
-sudo rm -f /usr/share/vulkan/icd.d/nvidia_icd.json
-```
-
-### 无头服务器额外依赖
+### 3. 无头服务器额外依赖
 
 ```bash
 sudo apt-get update && sudo apt-get install -y libegl1 libgl1
 ```
+
+> **注意：** 首次运行时 cuRobo 会 JIT 编译 CUDA kernel（适配 RTX 5090 的 Blackwell 架构），需要 **3-5 分钟**，属于正常现象。
 
 ---
 
@@ -111,34 +103,65 @@ uv run --no-sync --active capx/serving/openrouter_server.py --key-file .openrout
 
 ### 3. 运行评估
 
-所有 BEHAVIOR 任务均需激活 b1k 虚拟环境：
+所有 BEHAVIOR 任务需要在 Isaac Sim 的 conda 环境中运行，并设置正确的 `PYTHONPATH` 和 `LD_LIBRARY_PATH`：
 
 ```bash
-source capx/third_party/b1k/.venv/bin/activate
+source /opt/isaac-sim/setup_conda_env.sh
 ```
 
-```bash
-# R1Pro 拾取收音机（20 trials）
-OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
-uv run --no-sync --active capx/envs/launch.py \
-    --config-path env_configs/r1pro/r1pro_pick_up_radio.yaml \
-    --model "google/gemini-3.1-pro-preview"
+核心环境变量说明：
 
-# R1Pro 多轮 + 视觉差分
+| 变量 | 说明 |
+|------|------|
+| `PYTHONPATH` | 需包含 OmniGibson、bddl3 路径及 cap-x 项目根目录 |
+| `LD_LIBRARY_PATH` | 需指向 conda env 的 `lib` 目录 |
+| `OMNI_KIT_ACCEPT_EULA=YES` | 必须，接受 Isaac Sim EULA |
+| `OMNIGIBSON_HEADLESS=1` | 无头模式（无显示器时必设） |
+| `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` | 建议，避免 CUDA 显存碎片 |
+| `HF_HUB_OFFLINE=1` | 可选，离线模式跳过 HuggingFace 检查 |
+
+```bash
+# 无头烟测示例（600 秒超时）
+source /opt/isaac-sim/setup_conda_env.sh && timeout 600 env \
+  CAPX_FAST_EXIT_AFTER_MAIN=1 \
+  UV_CACHE_DIR=/tmp/uv-cache \
+  HF_HUB_OFFLINE=1 \
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  PYTHONPATH=/home/xingshu/miniforge3/envs/behavior/lib/python3.11/site-packages:\
+/home/xingshu/workspaces/fys/cap-x/capx/third_party/b1k/OmniGibson:\
+/home/xingshu/workspaces/fys/cap-x/capx/third_party/b1k/bddl3:\
+/home/xingshu/workspaces/fys/cap-x:$PYTHONPATH \
+  LD_LIBRARY_PATH=/home/xingshu/miniforge3/envs/behavior/lib:$LD_LIBRARY_PATH \
+  NUMBA_CACHE_DIR=/tmp/numba-cache \
+  MPLCONFIGDIR=/tmp/matplotlib-cache \
+  OMNI_KIT_ACCEPT_EULA=YES \
+  OMNIGIBSON_HEADLESS=1 \
+  python capx/envs/launch.py \
+    --config-path env_configs/r1pro/r1pro_pick_up_radio_sam2_smoke.yaml \
+    --model MiniMax-M2.7 \
+    --output-dir ./outputs/r1pro_pick_up_radio_sam2_smoke
+```
+
+其他常用任务示例：
+
+```bash
+source /opt/isaac-sim/setup_conda_env.sh
+
+# R1Pro 拾取收音机
 OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
-uv run --no-sync --active capx/envs/launch.py \
-    --config-path env_configs/r1pro/r1pro_pick_up_radio_multiturn_vdm.yaml \
+python capx/envs/launch.py \
+    --config-path env_configs/r1pro/r1pro_pick_up_radio.yaml \
     --model "google/gemini-3.1-pro-preview"
 
 # R1Pro Oracle（特权信息，用于基准测试）
 OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
-uv run --no-sync --active capx/envs/launch.py \
+python capx/envs/launch.py \
     --config-path env_configs/r1pro/r1pro_pick_up_radio_oracle.yaml \
     --model "google/gemini-3.1-pro-preview"
 
 # B1K 通用任务（替换为具体活动名）
 OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
-uv run --no-sync --active capx/envs/launch.py \
+python capx/envs/launch.py \
     --config-path env_configs/r1pro/b1k_hiding_Easter_eggs.yaml \
     --model "google/gemini-3.1-pro-preview"
 ```
@@ -147,6 +170,7 @@ uv run --no-sync --active capx/envs/launch.py \
 > - Isaac Sim 使用 `OMNIGIBSON_GPU_ID`（非 `CUDA_VISIBLE_DEVICES`）选择 GPU
 > - 多 GPU 系统建议：评估用 `OMNIGIBSON_GPU_ID=0`，感知服务器用 `CUDA_VISIBLE_DEVICES=1`
 > - 务必设置 `OMNI_KIT_ACCEPT_EULA=YES` 和 `OMNIGIBSON_HEADLESS=1`（无头模式）
+> - 建议设置 `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` 避免 5090 显存碎片问题
 
 ---
 
