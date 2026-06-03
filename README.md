@@ -1,201 +1,178 @@
 
 
 
-# CaP-X
+# CaP-X on BEHAVIOR-1K
 
-### A Framework for Benchmarking and Improving Coding Agents for Robot Manipulation
+### Code-as-Policy Agents for Robot Manipulation — Adapted for RTX 5090 + Isaac Sim 5.1
 
-[Project Page](https://capgym.github.io/) &ensp;|&ensp; [Paper](https://arxiv.org/abs/2603.22435) 
+> 本项目基于 [CaP-X](https://github.com/capgym/cap-x)（[论文](https://arxiv.org/abs/2603.22435) | [项目主页](https://capgym.github.io/)），
+> 针对 **RTX 5090 + Isaac Sim 5.1** 环境进行了适配，专注于 **BEHAVIOR-1K** 基准测试中的 R1Pro 人形机器人操作任务。
 
-**Max Fu<sup>&#42;,1,2</sup>, Justin Yu<sup>&#42;,2</sup>, Karim El-Refai<sup>&#42;,2</sup>, Ethan Kou<sup>&#42;,2</sup>, Haoru Xue<sup>&#42;,1,2</sup>,
-Huang Huang<sup>3</sup>, Wenli Xiao<sup>4</sup>, Guanzhi Wang<sup>1</sup>, Fei-Fei Li<sup>3</sup>, Guanya Shi<sup>4</sup>, Jiajun Wu<sup>3</sup>,
-Shankar Sastry<sup>2</sup>, Yuke Zhu<sup>1</sup>, Ken Goldberg<sup>&dagger;,2</sup>, Jim Fan<sup>&dagger;,1</sup>**
+**CaP-X** is an open-access framework for systematically studying Code-as-Policy agents in robot manipulation. This fork focuses on BEHAVIOR-1K tasks with the R1Pro humanoid robot, adapted for Isaac Sim 5.1 on RTX 5090 GPUs.
 
-<sup>1</sup>NVIDIA &ensp; <sup>2</sup>UC Berkeley &ensp; <sup>3</sup>Stanford University &ensp; <sup>4</sup>Carnegie Mellon University
-
-<sup>&#42;</sup>Equal contribution &ensp; <sup>&dagger;</sup>Equal advising
-
-
-
----
-**CaP-X** is an open-access framework for systematically studying Code-as-Policy agents in robot manipulation. It consists of four components:
-
-
-| Component      | What it does                                                                                                                                                                                   |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **CaP-Gym**    | Interactive Gymnasium environments where agents control robots by generating Python code that composes perception and control primitives. 39 tasks across Robosuite, LIBERO-PRO, and BEHAVIOR. |
-| **CaP-Bench**  | Systematic benchmark evaluating coding agents across abstraction levels, interaction modes, and visual grounding modalities. 8 tiers (S1-S4 single-turn, M1-M4 multi-turn).                    |
-| **CaP-Agent0** | Training-free agentic framework with multi-turn visual differencing, auto-synthesized skill libraries, and parallel ensembled reasoning.                                                       |
-| **CaP-RL**     | Reinforcement learning on the coding agent via GRPO, using environment rewards to post-train language models. Transfers from sim to real with minimal gap.                                     |
-
+| Component      | What it does                                                                                                                |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **CaP-Gym**    | Interactive Gymnasium environments — agents control robots via Python code composing perception & control primitives.       |
+| **CaP-Agent0** | Training-free agentic framework: multi-turn visual differencing, auto-synthesized skill libraries, parallel ensembled reasoning. |
+| **CaP-RL**     | RL post-training via GRPO — environment rewards fine-tune VLM coding agents. Sim-to-real with minimal gap.                  |
 
 ---
 
-## Installation
+## 环境要求
 
-CaP-X uses [uv](https://docs.astral.sh/uv/) for dependency management. Requires **Python 3.10** and a **CUDA-capable GPU**.
+- **GPU:** NVIDIA RTX 5090（或其他 Blackwell 架构 GPU）
+- **OS:** Ubuntu 22.04 / 24.04
+- **Python:** 3.10（Isaac Sim wheels 仅支持 cp310）
+- **CUDA:** 12.4+
+- **驱动:** 建议 570+（Blackwell 架构支持）
+
+## 安装
+
+使用 [uv](https://docs.astral.sh/uv/) 管理依赖。
 
 ```bash
-git clone --recurse-submodules https://github.com/capgym/cap-x && cd cap-x
+git clone --recurse-submodules <your-repo-url> && cd CaP-X-b1k
 
-# Or if already cloned without --recurse-submodules:
-git submodule update --init --recursive
-
-# Install uv (if not present)
+# 安装 uv（如未安装）
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 uv python install 3.10 && uv venv -p 3.10
 
-# Base install
+# 基础安装
 uv sync
 ```
 
-### Simulator-specific setup
-
-Pick **one** simulator family to install, as Robosuite (1.5.0) and LIBERO (`robosuite==1.4.0`) would be in conflict.
-
-#### Robosuite
-
-```bash
-uv sync --extra robosuite
-```
-
-#### LIBERO-PRO
-
-LIBERO requires a **separate virtual environment**.
-
-```bash
-uv venv .venv-libero --python 3.12
-source .venv-libero/bin/activate
-uv sync --active --extra libero --extra contactgraspnet
-```
-
-See [docs/libero-tasks.md](docs/libero-tasks.md) for running any of 130+ LIBERO tasks.
-
-#### BEHAVIOR (Isaac Sim)
-
-BEHAVIOR tasks run on NVIDIA Isaac Sim via OmniGibson. Requires Python 3.10 and CUDA 12.x.
+### BEHAVIOR + Isaac Sim 5.1 安装
 
 ```bash
 cd capx/third_party/b1k
-./uv_install.sh --dataset          # installs OmniGibson, Isaac Sim, BDDL, cuRobo, and downloads assets
-cd ../../..                        # back to repo root
-
-# Post-install fix — copy cuRobo JIT headers (run with b1k venv active)
-source capx/third_party/b1k/.venv/bin/activate
-cp capx/third_party/curobo/src/curobo/curobolib/cpp/*.h \
-   $(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")/curobo/curobolib/cpp/
+./uv_install.sh --dataset --accept-dataset-tos
+cd ../../..
 ```
 
-> The `--dataset` flag downloads robot assets, BEHAVIOR-1K scene/object assets, and 2025 challenge task instances. You will be prompted to accept the NVIDIA Isaac Sim EULA and BEHAVIOR dataset license. To auto-accept, add `--accept-dataset-tos`.
+此命令会安装 OmniGibson、Isaac Sim 5.1、BDDL、cuRobo，并下载机器人资产、BEHAVIOR-1K 场景/物体资产及 2025 challenge 任务实例。
 
-For headless servers:
+> **注意：** 首次运行时 cuRobo 会 JIT 编译 CUDA kernel（适配 RTX 5090 的 Blackwell 架构），需要 **3-5 分钟**，属于正常现象。
+
+### 安装后修复
+
 ```bash
-sudo apt-get update && sudo apt-get install -y libegl1 libgl1
-# Remove duplicate Vulkan ICD if present (causes segfault on multi-GPU systems)
+# 激活 b1k 虚拟环境
+source capx/third_party/b1k/.venv/bin/activate
+
+# 修复 cuRobo CUDA JIT 头文件
+cp capx/third_party/curobo/src/curobo/curobolib/cpp/*.h \
+   $(python -c "import sysconfig; print(sysconfig.get_path('purelib'))")/curobo/curobolib/cpp/
+
+# 修复 Vulkan ICD 冲突（多 GPU 系统可能 segfault）
 sudo rm -f /usr/share/vulkan/icd.d/nvidia_icd.json
 ```
 
-See [docs/behavior-tasks.md](docs/behavior-tasks.md) for task details and expected baselines.
-
-### Optional extras
+### 无头服务器额外依赖
 
 ```bash
-uv sync --extra verl             # RL training with VeRL/GRPO
-uv sync --extra contactgraspnet  # Contact-GraspNet grasp planning
-uv sync --extra curobo           # cuRobo GPU-accelerated IK & motion planning (requires CUDA)
+sudo apt-get update && sudo apt-get install -y libegl1 libgl1
 ```
 
-## Quick Start
+---
 
-### 1. Perception servers (auto-launched)
+## 快速开始
 
-Perception servers (SAM3, ContactGraspNet, PyRoKi) are **auto-launched** by the YAML config when you run an evaluation. No manual setup required for most configs.
+### 1. 感知服务器
 
-> **SAM3 authentication:** SAM3 weights require HuggingFace access. Request access at the [SAM3 repo](https://github.com/facebookresearch/sam3), then authenticate locally with `huggingface-cli login`. Weights are cached after first download.
+感知服务器（SAM3、ContactGraspNet、PyRoKi）由 YAML 配置**自动启动**，大多数情况下无需手动操作。
 
-To pre-launch servers (e.g. for sharing across multiple eval runs):
+> **SAM3 认证：** SAM3 权重需要 HuggingFace 授权。在 [SAM3 repo](https://github.com/facebookresearch/sam3) 申请访问权限后，本地执行 `huggingface-cli login`。权重首次下载后会缓存。
+
+如需跨多次评估共享服务器，可预启动：
 
 ```bash
-# Start SAM3 + GraspNet + PyRoKi with automatic GPU allocation
 uv run --no-sync --active capx/serving/launch_servers.py --profile default
 ```
 
-Use `--dry-run` to preview the allocation. Other profiles:
+可选 profile：
 
 ```bash
---profile full      # All perception servers (SAM3, GraspNet, PyRoKi, OWL-ViT, SAM2)
---profile minimal   # PyRoKi only (for oracle/privileged evals)
+--profile full      # 全部感知服务器 (SAM3, GraspNet, PyRoKi, OWL-ViT, SAM2)
+--profile minimal   # 仅 PyRoKi (oracle/privileged 评估)
 ```
 
-### 2. Set up an LLM proxy
+### 2. 配置 LLM 代理
 
-The evaluation harness queries an LLM through a local proxy that exposes an OpenAI-compatible API.
+评估框架通过本地 OpenAI 兼容 API 代理查询 LLM。
 
 ```bash
-# OpenRouter (get a key at openrouter.ai/keys)
+# OpenRouter（在 openrouter.ai/keys 获取密钥）
 echo "sk-or-v1-your-key-here" > .openrouterkey
 uv run --no-sync --active capx/serving/openrouter_server.py --key-file .openrouterkey --port 8110
 ```
 
-> **Note:** `.openrouterkey` are git-ignored. The default server URL in configs is `http://127.0.0.1:8110/chat/completions`. 
+详见 [docs/configuration.md](docs/configuration.md) 了解所有 LLM 提供商配置。
 
-See [docs/configuration.md](docs/configuration.md) for all provider options (OpenRouter, vLLM, custom).
+### 3. 运行评估
 
-### 3. Run evaluation
+所有 BEHAVIOR 任务均需激活 b1k 虚拟环境：
 
 ```bash
-# Robosuite: single-turn benchmark (100 trials, 12 parallel workers)
-uv run --no-sync --active capx/envs/launch.py \
-    --config-path env_configs/cube_stack/franka_robosuite_cube_stack.yaml \
-    --model "google/gemini-3.1-pro-preview"
-
-# Robosuite: multi-turn with visual differencing
-uv run --no-sync --active capx/envs/launch.py \
-    --config-path env_configs/cube_stack/franka_robosuite_cube_stack_multiturn_vdm.yaml \
-    --model "google/gemini-3.1-pro-preview"
-
-# LIBERO-PRO: spatial task (requires .venv-libero)
-source .venv-libero/bin/activate
-uv run --no-sync --active capx/envs/launch.py \
-    --config-path env_configs/libero/franka_libero_spatial_0.yaml \
-    --model "google/gemini-3.1-pro-preview"
-
-# BEHAVIOR: R1Pro radio pickup (20 trials) — requires b1k venv
 source capx/third_party/b1k/.venv/bin/activate
+```
+
+```bash
+# R1Pro 拾取收音机（20 trials）
 OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
 uv run --no-sync --active capx/envs/launch.py \
     --config-path env_configs/r1pro/r1pro_pick_up_radio.yaml \
     --model "google/gemini-3.1-pro-preview"
 
-# Interactive Web UI
+# R1Pro 多轮 + 视觉差分
+OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
 uv run --no-sync --active capx/envs/launch.py \
-    --config-path env_configs/cube_stack/franka_robosuite_cube_stack.yaml \
-    --web-ui True
-# Open http://localhost:8200
+    --config-path env_configs/r1pro/r1pro_pick_up_radio_multiturn_vdm.yaml \
+    --model "google/gemini-3.1-pro-preview"
 
-# Regression tests
-./scripts/regression_test.sh quick    # 10-trial smoke test (~30s)
-./scripts/regression_test.sh test1    # Full single-turn (~3 min)
+# R1Pro Oracle（特权信息，用于基准测试）
+OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
+uv run --no-sync --active capx/envs/launch.py \
+    --config-path env_configs/r1pro/r1pro_pick_up_radio_oracle.yaml \
+    --model "google/gemini-3.1-pro-preview"
+
+# B1K 通用任务（替换为具体活动名）
+OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
+uv run --no-sync --active capx/envs/launch.py \
+    --config-path env_configs/r1pro/b1k_hiding_Easter_eggs.yaml \
+    --model "google/gemini-3.1-pro-preview"
 ```
 
-> **Tip (BEHAVIOR):** Isaac Sim uses `OMNIGIBSON_GPU_ID` (not `CUDA_VISIBLE_DEVICES`) to select the GPU. For best performance on multi-GPU systems, run perception servers on a separate GPU (e.g. `OMNIGIBSON_GPU_ID=0` for the eval, and pre-launch SAM3/GraspNet with `CUDA_VISIBLE_DEVICES=1`). Set `OMNI_KIT_ACCEPT_EULA=YES` and `OMNIGIBSON_HEADLESS=1` for headless evaluation.
+> **RTX 5090 注意事项：**
+> - Isaac Sim 使用 `OMNIGIBSON_GPU_ID`（非 `CUDA_VISIBLE_DEVICES`）选择 GPU
+> - 多 GPU 系统建议：评估用 `OMNIGIBSON_GPU_ID=0`，感知服务器用 `CUDA_VISIBLE_DEVICES=1`
+> - 务必设置 `OMNI_KIT_ACCEPT_EULA=YES` 和 `OMNIGIBSON_HEADLESS=1`（无头模式）
 
 ---
 
-## Documentation
+## 可用任务
 
-| Guide | Contents |
-| ----- | -------- |
-| [Adding Environments](docs/adding-environments.md) | Creating simulators, task environments, YAML configs |
-| [Adding APIs](docs/adding-apis.md) | Implementing and registering new robot control APIs |
-| [Configuration](docs/configuration.md) | YAML format, CLI flags, LLM provider setup |
-| [LIBERO-PRO Tasks](docs/libero-tasks.md) | Setup, running any of 130+ LIBERO tasks, suite reference |
-| [BEHAVIOR Tasks](docs/behavior-tasks.md) | Setup, R1Pro tasks, expected baselines, environment variables |
-| [Development](docs/development.md) | Testing, linting, LIBERO/GraspNet setup, checkpoints, known issues |
-| [Real-World Franka Panda Bringup](docs/real-franka.md) | Bringup with robots_realtime, real-robot QuickStart |
-| [RL Training](docs/rl-training.md) | CaP-RL with GRPO/VeRL, sim-to-real transfer |
-| [Skill Library Compilation](scripts/skill_library_compilation/README.md) | Analyze eval outputs, compile reusable skill libraries |
+`env_configs/r1pro/` 目录下包含所有 BEHAVIOR-1K 任务配置：
+
+| 类型 | 数量 | 示例 |
+|------|------|------|
+| **R1Pro 专项** | 6 个 | `r1pro_pick_up_radio.yaml`, `r1pro_pick_up_trash.yaml` 及其 oracle/multiturn 变体 |
+| **B1K 通用** | 48 个 | `b1k_assembling_gift_baskets.yaml`, `b1k_chop_an_onion.yaml` 等 |
+
+详见 [docs/behavior-tasks.md](docs/behavior-tasks.md)。
+
+---
+
+## 文档
+
+| 文档 | 内容 |
+|------|------|
+| [BEHAVIOR 任务](docs/behavior-tasks.md) | 环境变量、R1Pro 任务详情、基准性能 |
+| [配置说明](docs/configuration.md) | YAML 格式、CLI 参数、LLM 提供商配置 |
+| [添加新环境](docs/adding-environments.md) | 创建模拟器、任务环境、YAML 配置 |
+| [添加新 API](docs/adding-apis.md) | 实现并注册机器人控制 API |
+| [真机 Franka Panda](docs/real-franka.md) | 真机部署、QuickStart |
+| [RL 训练](docs/rl-training.md) | CaP-RL + GRPO/VeRL、sim-to-real 迁移 |
 
 ---
 
