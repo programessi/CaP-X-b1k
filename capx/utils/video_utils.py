@@ -9,6 +9,10 @@ import imageio
 import numpy as np
 from PIL import Image
 
+# Suppress ffmpeg stderr noise (e.g. "Packet corrupt" during cleanup)
+os.environ.setdefault("IMAGEIO_FFMPEG_LOG_LEVEL", "error")
+os.environ.setdefault("FFMPEG_LOG_LEVEL", "error")
+
 
 def _encode_video_base64(frames: list[np.ndarray], fps: int = 30) -> str:
     """Encode a list of RGB frames as a base64-encoded MP4 video data URL.

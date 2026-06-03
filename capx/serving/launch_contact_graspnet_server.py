@@ -7,6 +7,9 @@ import logging
 import os
 import sys
 import time
+
+# Reduce CUDA memory fragmentation — critical when multiple models share one GPU
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 from pathlib import Path
 from typing import Any, List, Tuple
 
@@ -162,6 +165,14 @@ def _do_plan(req: PlanRequest) -> PlanResponse:
     if z_range is None:
         z_range = [0.2, 2.0]
 
+    logger.info(
+        f"[GraspNet] Plan request: depth={depth.shape} ({depth.dtype}), "
+        f"segmap={segmap.shape} ({segmap.dtype}), "
+        f"segmap_id={segmap_id}, unique_ids={np.unique(segmap).tolist()}, "
+        f"NaN in depth={np.isnan(depth).sum()}, "
+        f"z_range={z_range}"
+    )
+
     # extract_point_clouds
     pc_full, pc_segments, pc_colors = _GRASP_ESTIMATOR.extract_point_clouds(
         depth,
@@ -170,6 +181,12 @@ def _do_plan(req: PlanRequest) -> PlanResponse:
         segmap_id=segmap_id,
         skip_border_objects=req.skip_border_objects,
         z_range=z_range,
+    )
+
+    logger.info(
+        f"[GraspNet] Point clouds extracted: pc_full={pc_full.shape}, "
+        f"pc_segments keys={list(pc_segments.keys())}, "
+        f"pc_segments[{segmap_id}] size={pc_segments.get(segmap_id, np.array([])).shape if segmap_id in pc_segments else 'MISSING'}"
     )
 
     pred_grasps_cam, scores, contact_pts, _ = _GRASP_ESTIMATOR.predict_scene_grasps(
@@ -259,6 +276,9 @@ def _do_plan(req: PlanRequest) -> PlanResponse:
         else:
             contact_pts_out = contact_pts_result
 
+    # Free GPU memory accumulated during inference
+    torch.cuda.empty_cache()
+
     return PlanResponse(
         grasps_base64=_numpy_to_base64(grasps_out),
         scores_base64=_numpy_to_base64(scores_out),
@@ -274,7 +294,8 @@ async def plan_endpoint(req: PlanRequest):
     try:
         return await _run_on_gpu(_do_plan, req)
     except Exception as e:
-        logger.error(f"Grasp planning failed: {e}")
+        import traceback
+        logger.error(f"[GraspNet 500] Grasp planning failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Grasp planning failed: {e}")
 
 

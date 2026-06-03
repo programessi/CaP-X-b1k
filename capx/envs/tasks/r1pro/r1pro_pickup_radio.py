@@ -20,12 +20,12 @@ find_radio = find_object_base_rotate("red radio")
 print(f"Radio found: {find_radio}")
 
 # get radio pose
-radio_pos, radio_qua, _, P_radio, radio_obb = get_object_pose("red radio")
+radio_pos, radio_qua, _, P_radio, radio_obb = get_object_pose("red radio", return_bbox_extent=True)
 print(f"Radio points: {P_radio}")
 print(f"Radio pose: {radio_pos}, {radio_qua}")
 
 # # get the table pose
-table_pos, table_qua, _, P_table, table_obb = get_object_pose("table")
+table_pos, table_qua, _, P_table, table_obb = get_object_pose("table", return_bbox_extent=True)
 print(f"Table pose: {table_pos}, {table_qua}")
 print(f"Table points: {P_table}")
 # goto_radio()
@@ -48,7 +48,7 @@ if not find_radio:
     if not find_radio:
         find_radio = find_object_torso_rotate("red radio")
 
-radio_pos, radio_qua, _, P_radio, radio_obb = get_object_pose("red radio")
+radio_pos, radio_qua, _, P_radio, radio_obb = get_object_pose("red radio", return_bbox_extent=True)
 # print(f"Radio points: {P_radio}")
 # print(f"Radio pose: {radio_pos}, {radio_qua}")
 

@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import List, Literal, Optional, Union
 
+import httpx
 import tyro
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -81,12 +82,14 @@ def create_app(api_key: str, base_url: str, async_client: bool = True) -> FastAP
             api_key=api_key,
             base_url=base_url,
             default_headers=default_headers,
+            http_client=httpx.AsyncClient(proxy=None),
         )
     else:
         client = OpenAI(
             api_key=api_key,
             base_url=base_url,
             default_headers=default_headers,
+            http_client=httpx.Client(proxy=None),
         )
 
     app = FastAPI(title="OpenRouter Proxy", version="1.0.0")

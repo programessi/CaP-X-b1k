@@ -18,10 +18,17 @@ Execution flow::
 from __future__ import annotations
 
 import os
+import sys
 import time
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+# Suppress benign gymnasium warning about casting inputs to numpy
+warnings.filterwarnings("ignore", message=".*Casting input x to numpy array.*")
+# Suppress JAX os.fork() RuntimeWarning (JAX threads + Isaac Sim subprocess = expected noise)
+warnings.filterwarnings("ignore", message=".*os.fork.*incompatible with multithreaded code.*")
 
 import tyro
 
@@ -224,3 +231,7 @@ def main(args: LaunchArgs) -> None:
 
 if __name__ == "__main__":
     main(tyro.cli(LaunchArgs))
+    if os.environ.get("CAPX_FAST_EXIT_AFTER_MAIN") == "1":
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)

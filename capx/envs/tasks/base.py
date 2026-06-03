@@ -1,5 +1,7 @@
+import ast
 import contextlib
 import io
+import re
 import sys
 import traceback
 from collections.abc import Callable
@@ -113,7 +115,12 @@ class CodeExecutionEnvBase(Env):
         if cfg.oracle_code is not None:
             self.oracle_code = cfg.oracle_code
         self._system_prompt = (
-            "You are a helpful assistant that generates Python code to directly solve the task."
+            "You are a code generation engine. "
+            "Output only executable Python code. "
+            "Do not output explanations, markdown fences, natural language, or igid tags. "
+            "Do not include reasoning or analysis. "
+            "Do not include any text that is not valid Python syntax. "
+            "The entire response must be valid Python code that can be directly passed to exec()."
         )
         self._full_prompt = [
             {"role": "system", "content": self._system_prompt},
@@ -150,7 +157,167 @@ class CodeExecutionEnvBase(Env):
             docs.append(f"\n{text.strip()}")
         return f"{self._task_prompt}\nAPIs:\n" + "\n".join(docs)
 
+    def _clean_model_code(self, code: str) -> str:
+        """
+        Clean raw model output before passing it to exec().
+
+        Reasoning-style models such as MiniMax-M2.7 may return natural-language
+        reasoning, igid...ground blocks, markdown fences, or a mixture of
+        prose and code. This method keeps only executable Python code as much as
+        possible.
+
+        The function is intentionally conservative:
+        - If a fenced Python code block exists, use it.
+        - Remove complete and unclosed igid blocks.
+        - Remove common natural-language lead-ins.
+        - Try to find the shortest leading-trimmed suffix that parses as Python.
+        - If parsing still fails, return an empty string instead of executing
+          leaked reasoning text.
+        """
+        if not isinstance(code, str):
+            code = str(code)
+
+        original_code = code
+        code = code.strip()
+
+        # Prefer fenced Python code blocks from the original response.
+        # This handles responses like:
+        # igid...ground
+        # ```python
+        # ...
+        # ```
+        fenced_blocks = re.findall(
+            r"```(?:python|py)?\s*(.*?)```",
+            original_code,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        # --- Debug: print extracted code summary ---
+        if fenced_blocks:
+            print(f"[CodeExtractor] Found {len(fenced_blocks)} fenced block(s). Using first (len={len(fenced_blocks[0])}).")
+        else:
+            # Count non-comment, non-blank lines in the raw code
+            raw_lines = [l for l in original_code.splitlines() if l.strip() and not l.strip().startswith('#')]
+            print(f"[CodeExtractor] No fenced blocks found. Raw code has {len(raw_lines)} meaningful lines.")
+            if raw_lines:
+                print(f"[CodeExtractor] First 3 lines: {raw_lines[:3]}")
+        
+        # Remove complete reasoning blocks, e.g. igid ... igid.
+        code = re.sub(
+            r"igid.*?igid",
+            "",
+            code,
+            flags=re.DOTALL | re.IGNORECASE,
+        ).strip()
+
+        # Remove an unclosed igid block.
+        # If anything remains before igid, keep that; otherwise discard the
+        # text rather than executing reasoning prose.
+        think_match = re.search(r"igid", code, flags=re.IGNORECASE)
+        if think_match:
+            code = code[:think_match.start()].strip()
+
+        # Remove markdown fence leftovers if only one side was emitted.
+        code = re.sub(r"^```(?:python|py)?\s*", "", code, flags=re.IGNORECASE).strip()
+        code = re.sub(r"```\s*$", "", code).strip()
+
+        # Remove common non-code lead-ins.
+        prefixes = [
+            "Here is the code:",
+            "Here is Python code:",
+            "The code is:",
+            "Sure, here is the code:",
+            "Below is the code:",
+            "Here is a possible solution:",
+            "A possible solution is:",
+        ]
+        for prefix in prefixes:
+            if code.lower().startswith(prefix.lower()):
+                code = code[len(prefix):].strip()
+                break
+
+        # If the current result already parses, return it.
+        if code:
+            try:
+                ast.parse(code)
+                return code
+            except SyntaxError:
+                pass
+
+        # Try to remove leading natural-language lines until the rest parses.
+        # Do NOT use "=" as a signal for Python, because natural language often
+        # contains equations such as theta = 90 degrees.
+        lines = code.splitlines()
+        while lines:
+            candidate = "\n".join(lines).strip()
+            if not candidate:
+                return ""
+
+            try:
+                ast.parse(candidate)
+                return candidate
+            except SyntaxError:
+                lines.pop(0)
+
+        # Last-resort heuristic:
+        # Find the first line that looks like a real Python statement and keep
+        # from there. This avoids executing leading prose such as "Simplify: ...".
+        python_starters = (
+            "import ",
+            "from ",
+            "def ",
+            "class ",
+            "for ",
+            "while ",
+            "if ",
+            "elif ",
+            "else:",
+            "try:",
+            "except ",
+            "with ",
+            "print(",
+            "return ",
+            "raise ",
+            "assert ",
+            "RESULT",
+            "obs",
+            "env",
+            "APIS",
+            "#",
+        )
+        assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_\.\[\]\(\), ]*\s*=\s*.+")
+        function_call_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_\.]*\(.*\)\s*$")
+
+        lines = code.splitlines()
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if (
+                stripped.startswith(python_starters)
+                or assignment_pattern.match(stripped)
+                or function_call_pattern.match(stripped)
+            ):
+                candidate = "\n".join(lines[i:]).strip()
+                try:
+                    ast.parse(candidate)
+                    return candidate
+                except SyntaxError:
+                    continue
+
+        # If nothing valid can be recovered, return an empty string. Executing an
+        # empty string is safe and avoids crashing on leaked reasoning text.
+        return ""
+
     def _exec_user_code(self, code: str) -> dict[str, Any]:
+        code = self._clean_model_code(code)
+        
+        # Debug: print what we're about to execute
+        if not code.strip():
+            print("[ExecUserCode] WARNING: _clean_model_code returned empty code!")
+        else:
+            code_lines = code.strip().splitlines()
+            print(f"[ExecUserCode] Executing {len(code_lines)} lines of code. First 3 lines:")
+            for line in code_lines[:3]:
+                print(f"  > {line[:120]}")
+
         obs = self._get_observation()
         # Update dynamic obs while retaining previously defined variables
         self._exec_globals["obs"] = obs

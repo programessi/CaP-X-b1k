@@ -1,0 +1,16 @@
+#无头烟测 b1k
+source /opt/isaac-sim/setup_conda_env.sh && timeout 600 env \
+  CAPX_FAST_EXIT_AFTER_MAIN=1 \
+  UV_CACHE_DIR=/tmp/uv-cache \
+  HF_HUB_OFFLINE=1 \
+  PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  PYTHONPATH=/home/xingshu/miniforge3/envs/behavior/lib/python3.11/site-packages:/home/xingshu/workspaces/fys/cap-x/capx/third_party/b1k/OmniGibson:/home/xingshu/workspaces/fys/cap-x/capx/third_party/b1k/bddl3:/home/xingshu/workspaces/fys/cap-x:$PYTHONPATH \
+  LD_LIBRARY_PATH=/home/xingshu/miniforge3/envs/behavior/lib:$LD_LIBRARY_PATH \
+  NUMBA_CACHE_DIR=/tmp/numba-cache \
+  MPLCONFIGDIR=/tmp/matplotlib-cache \
+  OMNI_KIT_ACCEPT_EULA=YES \
+  OMNIGIBSON_HEADLESS=1 \
+  python capx/envs/launch.py \
+    --config-path env_configs/r1pro/r1pro_pick_up_radio_sam2_smoke.yaml \
+    --model MiniMax-M2.7 \
+    --output-dir ./outputs/r1pro_pick_up_radio_sam2_smoke_minimax_directnav_7

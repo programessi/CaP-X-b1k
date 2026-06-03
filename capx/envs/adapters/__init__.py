@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .libero_wrapper import LiberoWrapper
-from .robosuite_wrapper import RoboSuiteWrapper
+# Adapters have been removed (robosuite/LIBERO only).
+# Behavior (b1k/OmniGibson) uses its own native environment.
 
-__all__ = ["LiberoWrapper", "RoboSuiteWrapper"]

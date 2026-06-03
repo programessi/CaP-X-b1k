@@ -56,6 +56,12 @@ logger = logging.getLogger(__name__)
 
 MULTITURN_LIMIT = 30
 
+# Module-level reference to a preloaded environment (set by launch.py before
+# uvicorn starts).  When non-None, run_trial_async will reuse this env instead
+# of calling instantiate(), avoiding a second _start_app call that would
+# segfault inside the asyncio event loop.
+_PRELOADED_ENV: Any | None = None
+
 
 @dataclass
 class LaunchArgsCompat:
@@ -133,8 +139,10 @@ async def run_trial_async(
             session.env_factory["cfg"]["enable_render"] = True
             session.env_factory["cfg"]["viser_debug"] = True
 
-        # Use a single-worker thread pool for ALL env operations so that MuJoCo's
-        # thread-local osmesa GL context is always available for rendering.
+        # Use a single-worker thread pool for env operations (step, render, etc.)
+        # so that MuJoCo's thread-local osmesa GL context is always available.
+        # HOWEVER: Isaac Sim / Omniverse MUST be initialized on the main thread
+        # because CUDA context, OpenGL, and other runtime resources are tied to it.
         import concurrent.futures
         env_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="env")
         loop = asyncio.get_running_loop()
@@ -143,7 +151,13 @@ async def run_trial_async(
             return await loop.run_in_executor(env_executor, func, *args)
 
         logger.info(f"Instantiating environment for session {session.session_id}")
-        env = await run_in_env_thread(instantiate, session.env_factory)
+        # Reuse preloaded env (created on main thread before uvicorn started)
+        # to avoid segfault when Isaac Sim _start_app runs inside asyncio loop.
+        if _PRELOADED_ENV is not None:
+            env = _PRELOADED_ENV
+            logger.info("Using preloaded environment (initialized on main thread)")
+        else:
+            env = instantiate(session.env_factory)
 
         # Store env reference in session for safety interrupt
         session.env = env

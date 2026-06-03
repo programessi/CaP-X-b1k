@@ -163,30 +163,147 @@ def _load_config(args: LaunchArgs) -> tuple[Any, dict[str, Any], list]:
 
 
 def _extract_code(content: str) -> list[str]:
-    """Extract Python code from Markdown fenced code block.
+    """Extract Python code from model response.
+
+    Handles both fenced (`` ```python ``) and unfenced Python code.
+    When the model splits code across multiple blocks (some fenced, some not),
+    all fragments are merged into a single executable block so that variables
+    defined in earlier fragments are available to later ones.
 
     Args:
         content: Raw model response
 
     Returns:
-        Extracted Python code list
+        Extracted Python code list (single merged block)
     """
-    fence_start = "```python\n"
-    fence_end = "```"
-    start_idx = 0
-    end_idx = len(content) + 1
-    if fence_start in content:
-        start_idx = content.find(fence_start) + len(fence_start)
-        content = content[start_idx:]
-    if fence_end in content:
-        end_idx = content.rfind(fence_end)
-        content = content[:end_idx]
+    import ast
+    import re
 
-    content = content.strip()
-    # NOTE: might gen empty code block at the end
-    # content_list = content.split("breakpoint_code_block()")
+    fragments: list[str] = []
 
-    return [content]
+    # 1. Extract all ```python fenced blocks
+    fence_pattern = re.compile(
+        r"```(?:python|py)\s*\n(.*?)```",
+        re.DOTALL | re.IGNORECASE,
+    )
+    fenced_matches = list(fence_pattern.finditer(content))
+
+    if fenced_matches:
+        # 2. Check for unfenced Python code BEFORE the first fence
+        first_fence_start = fenced_matches[0].start()
+        prefix = content[:first_fence_start].strip()
+        if prefix:
+            # Remove common reasoning/markdown lead-in patterns
+            cleaned_prefix = _strip_reasoning_text(prefix)
+            if cleaned_prefix and _looks_like_python(cleaned_prefix):
+                fragments.append(cleaned_prefix)
+
+        # 3. Add all fenced blocks (already stripped of ``` markers)
+        for match in fenced_matches:
+            fenced_code = match.group(1).strip()
+            if fenced_code:
+                fragments.append(fenced_code)
+
+        # 4. Check for unfenced Python code AFTER the last fence
+        last_fence_end = fenced_matches[-1].end()
+        suffix = content[last_fence_end:].strip()
+        if suffix:
+            cleaned_suffix = _strip_reasoning_text(suffix)
+            if cleaned_suffix and _looks_like_python(cleaned_suffix):
+                fragments.append(cleaned_suffix)
+
+        if fragments:
+            merged = "\n".join(fragments)
+            return [merged]
+
+    # Fallback: no fenced blocks found, try the whole content
+    cleaned = _strip_reasoning_text(content.strip())
+    if cleaned:
+        return [cleaned]
+    return [content.strip()]
+
+
+def _strip_reasoning_text(text: str) -> str:
+    """Remove common natural-language lead-in/out lines from model output.
+
+    Leaves Python code lines intact (comments, imports, assignments, etc.).
+    """
+    lines = text.splitlines()
+    # Remove leading non-Python lines (natural language prose)
+    while lines:
+        stripped = lines[0].strip()
+        if not stripped:
+            lines.pop(0)
+            continue
+        if _is_python_line(stripped):
+            break
+        lines.pop(0)
+    # Remove trailing non-Python lines
+    while lines:
+        stripped = lines[-1].strip()
+        if not stripped:
+            lines.pop()
+            continue
+        if _is_python_line(stripped):
+            break
+        lines.pop()
+    return "\n".join(lines)
+
+
+def _is_python_line(line: str) -> bool:
+    """Check if a line looks like Python code (not natural language prose)."""
+    line = line.strip()
+    if not line:
+        return True  # blank lines are fine
+    # Python comment
+    if line.startswith("#"):
+        return True
+    # Common Python patterns
+    python_starts = (
+        "import ", "from ", "def ", "class ", "if ", "elif ", "else:",
+        "for ", "while ", "try:", "except ", "finally:", "with ",
+        "return ", "yield ", "raise ", "assert ", "pass", "break", "continue",
+        "print(", "del ", "global ", "nonlocal ",
+    )
+    for p in python_starts:
+        if line.startswith(p):
+            return True
+    # Variable assignments or function calls (heuristic: contains = or starts with identifier + paren)
+    if "=" in line and not line.startswith(("http://", "https://", "<", "|", ">", "-", "*")):
+        return True
+    # Function/method calls: identifier(
+    if line[0].isalpha() and "(" in line:
+        return True
+    # Decorators
+    if line.startswith("@"):
+        return True
+    return False
+
+
+def _looks_like_python(text: str) -> bool:
+    """Heuristic: return True if text appears to be Python code.
+
+    Uses a combination of AST parsing and line-level heuristics.
+    """
+    import ast
+
+    if not text or not text.strip():
+        return False
+
+    # Try AST parse first (most reliable)
+    try:
+        ast.parse(text)
+        return True
+    except SyntaxError:
+        pass
+
+    # Fallback: check if most non-blank lines look like Python
+    lines = [l for l in text.splitlines() if l.strip()]
+    if not lines:
+        return False
+    python_lines = sum(1 for l in lines if _is_python_line(l))
+    # If > 50% of lines look like Python, treat it as code
+    return python_lines >= len(lines) * 0.5
 
 
 def _build_multi_turn_decision_prompt_legacy(

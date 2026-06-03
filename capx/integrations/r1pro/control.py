@@ -195,8 +195,6 @@ class R1ProControlApi(ApiBase):
             
     def functions(self) -> dict[str, Any]:
         fns = {
-            "segment_sam3_text_prompt": self.segment_sam3_text_prompt,
-            "segment_sam3_point_prompt": self.segment_sam3_point_prompt,
             "point_prompt_molmo": self.point_prompt_molmo,
             "navigate_to_pose": self.navigate_to_pose,
             "open_gripper": self.open_gripper,
@@ -213,7 +211,6 @@ class R1ProControlApi(ApiBase):
             "check_object_in_hand": self.check_object_in_hand,
             "get_env_observation": self.get_env_observation,
             "write_video": self.write_video,
-            "get_sam3_mask": self.get_sam3_mask,
             
             "get_object_pose": self.get_object_pose,
             "find_object_base_rotate": self.find_object_base_rotate,
@@ -224,6 +221,22 @@ class R1ProControlApi(ApiBase):
             "sample_grasp_pose": self.sample_grasp_pose,
             # "debug_pyroik": self.debug_pyroik,
         }
+        if self.use_sam3:
+            fns.update(
+                {
+                    "segment_sam3_text_prompt": self.segment_sam3_text_prompt,
+                    "segment_sam3_point_prompt": self.segment_sam3_point_prompt,
+                    "get_sam3_mask": self.get_sam3_mask,
+                }
+            )
+        else:
+            fns.update(
+                {
+                    "detect_object_owlvit": self.detect_object_owlvit,
+                    "segment_sam2": self.segment_sam2,
+                    "get_sam2_mask": self.get_sam2_mask,
+                }
+            )
         return fns
     
     def segment_sam3_text_prompt(
@@ -297,28 +310,105 @@ class R1ProControlApi(ApiBase):
             object query; (None, None) if parsing failed.
         """
         return self.molmo_point_fn(Image.fromarray(image), objects=[text_prompt])
+
+    def detect_object_owlvit(
+        self,
+        rgb: np.ndarray,
+        text: str,
+    ) -> list[dict[str, Any]]:
+        """Run OWL-ViT open-vocabulary detection on a single RGB image.
+
+        Args:
+            rgb: RGB image array of shape (H, W, 3), dtype uint8.
+            text: Natural language text query for OWL-ViT.
+
+        Returns:
+            detections: A list of dictionaries. Each dictionary contains:
+              - "box": [x1, y1, x2, y2] pixel coordinates.
+              - "label": Detected text label.
+              - "score": Confidence score.
+        """
+        return self.owl_vit_det_fn(rgb, texts=[[text]])
+
+    def segment_sam2(
+        self,
+        rgb: np.ndarray,
+        box: list[float] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Run SAM2 segmentation on an RGB image, optionally conditioned on a box.
+
+        Args:
+            rgb: RGB image array of shape (H, W, 3), dtype uint8.
+            box: Optional [x1, y1, x2, y2] box from OWL-ViT.
+
+        Returns:
+            masks: A list of dictionaries. Each dictionary contains:
+              - "mask": np.ndarray of shape (H, W), dtype bool.
+              - "score": Confidence score.
+        """
+        return self.sam2_seg_fn(rgb, box=box)
     
     
     def get_navigation_pose(self, P_table: np.ndarray, P_object: np.ndarray) -> tuple[float, float, float]:
         """Get the navigation pose for the robot to navigate to the object on the table.
         The navigation pose is the pose that the robot should navigate to in order to reach the object.
-        since the object is on the table, we need to navigate to the closest point on the table edge to the object.
         Args:
             P_table: point cloud of the table in the environment in np.ndarray format.
             P_object: point cloud of the object in the environment in np.ndarray format.
         Returns:
             navigation_pose: Navigation pose for the robot to navigate to the object.
         """
-        goal = get_navigation_pose(P_table, P_object)
+        P_table = np.asarray(P_table)
+        P_object = np.asarray(P_object)
+
+        def _safe_point_xy(pts: np.ndarray) -> np.ndarray:
+            """Extract 2D (x, y) center from point cloud, robust to edge cases."""
+            pts = np.atleast_2d(pts)
+            if pts.size == 0:
+                return np.zeros(2, dtype=np.float64)
+            if pts.ndim == 1:
+                pts = pts.reshape(-1, 3) if pts.size >= 3 else pts.reshape(1, -1)
+            # Take median of all points
+            center = np.median(pts, axis=0)
+            # Ensure at least 2 elements
+            if center.size < 2:
+                center = np.pad(center.ravel(), (0, max(0, 2 - center.size)), constant_values=0.0)
+            return np.asarray(center[:2], dtype=np.float64)
+
+        object_xy = _safe_point_xy(P_object)
+        table_xy = _safe_point_xy(P_table)
+        robot_pos, _, _ = self.get_robot_position()
+        robot_xy = np.asarray(robot_pos, dtype=np.float64)[:2]
+        approach = robot_xy - object_xy
+        approach_norm = np.linalg.norm(approach)
+        if approach_norm < 1e-6:
+            approach = table_xy - object_xy
+            approach_norm = np.linalg.norm(approach)
+        if approach_norm < 1e-6:
+            approach = np.array([1.0, 0.0], dtype=np.float64)
+            approach_norm = 1.0
+        approach = approach / approach_norm
+        base_xy = object_xy + approach * 0.75
+        yaw = float(np.arctan2(object_xy[1] - base_xy[1], object_xy[0] - base_xy[0]))
+        goal = (float(base_xy[0]), float(base_xy[1]), yaw)
+        print("Navigation pose:", goal)
         return goal
         
 
     def _get_segmentation_map(
         self, obs: dict[str, Any], rgb: np.ndarray, box: list[float] = None
     ) -> np.ndarray:
-        images = obs["robot0_robotview"]["images"]
+        images = obs.get("robot0_robotview", {}).get("images", {})
         segmentation = images.get("segmentation")
+        if segmentation is None:
+            robot_keys = [key for key in obs.keys() if "robot" in key]
+            if robot_keys:
+                robot_key = robot_keys[0]
+                camera_obs = obs.get(robot_key, {}).get(f"{robot_key}:zed_link:Camera:0", {})
+                segmentation = camera_obs.get("seg_instance")
         if segmentation is not None:
+            if hasattr(segmentation, "detach"):
+                segmentation = segmentation.detach().cpu().numpy()
             if segmentation.ndim == 2:
                 segmentation = segmentation[..., None]
             return segmentation.astype(np.int32, copy=False)
@@ -333,12 +423,13 @@ class R1ProControlApi(ApiBase):
             # Just use mask with the highest score
             max_score = -1
             max_idx = -1
-            for idx, entry in enumerate(masks, start=1):
+            for idx, entry in enumerate(masks):
                 score = entry.get("score")
                 if score is not None and score > max_score:
                     max_score = score
                     max_idx = idx
-            masks = [masks[max_idx]]
+            if max_idx >= 0:
+                masks = [masks[max_idx]]
 
         height, width = rgb.shape[:2]
         seg_map = np.zeros((height, width, 1), dtype=np.int32)
@@ -488,6 +579,28 @@ class R1ProControlApi(ApiBase):
         
         return mask.sum()
 
+    def get_sam2_mask(self, object_name: str) -> np.ndarray:
+        """Get the SAM2 mask area for an object in the current camera view.
+
+        Uses OWL-ViT to detect a box from the object name, then SAM2 to segment
+        the detected region.
+        """
+        obs = self._env.get_observation()
+
+        rgb, depth = obs_get_rgb_depth(obs)
+        rgb = rgb.cpu().numpy()[..., :3]
+
+        dets = self.owl_vit_det_fn(rgb, texts=[[object_name]])
+        if len(dets) == 0:
+            raise ValueError("No OWL-ViT detections")
+
+        scores = [det["score"] for det in dets]
+        box = dets[int(np.argmax(scores))]["box"]
+        segmentation = self._get_segmentation_map(obs, rgb, box=box)
+        queried_instance_idx, _ = self._select_instance_from_box(segmentation, box)
+        mask = segmentation[:, :, 0] == queried_instance_idx
+        return mask.sum()
+
     def get_object_pose(
         self, object_name: str, return_bbox_extent: bool = False
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
@@ -575,6 +688,7 @@ class R1ProControlApi(ApiBase):
                 segmentation.flatten()[binary_map_nan_is_zero.flatten().astype(bool)]
                 == queried_instance_idx
             )
+            mask = segmentation[:, :, 0] == queried_instance_idx
 
         obj_mask = mask & binary_map_nan_is_zero
         
@@ -605,7 +719,7 @@ class R1ProControlApi(ApiBase):
             print(f"Object extent for {object_name}: {obb.extent}")
             return obb_tf_world.wxyz_xyz[-3:], obb_tf_world.wxyz_xyz[:4], obb.extent, np.asarray(o3d_points.points), obb
         else:
-            return obb_tf_world.wxyz_xyz[-3:], obb_tf_world.wxyz_xyz[:4], None, np.asarray(o3d_points.points), obb
+            return obb_tf_world.wxyz_xyz[-3:], obb_tf_world.wxyz_xyz[:4], None
         
 
     def sample_grasp_pose(self, object_name: str) -> tuple[list[np.ndarray], list[np.ndarray]] | tuple[None, None]:
@@ -662,7 +776,20 @@ class R1ProControlApi(ApiBase):
                 )
             idxs = np.where(segmentation.flatten() & binary_map_nan_is_zero.flatten().astype(bool))
             queried_instance_idx = 1
-        
+        else:
+            dets = self.owl_vit_det_fn(rgb, texts=[[object_name]])
+            if len(dets) == 0:
+                raise ValueError("No detections; environment constraints or model mismatch")
+
+            scores = [d["score"] for d in dets]
+            box = dets[int(np.argmax(scores))]["box"]
+            segmentation = self._get_segmentation_map(obs, rgb, box=box)
+            queried_instance_idx, seg_crop = self._select_instance_from_box(segmentation, box)
+            if self.debug:
+                self._save_segmentation_debug(segmentation, pathlib.Path("segmentation_image.jpg"))
+                self._save_segmentation_debug(seg_crop, pathlib.Path("seg_crop_image.jpg"))
+            mask = segmentation[:, :, 0] == queried_instance_idx
+
 
         obj_mask = mask & binary_map_nan_is_zero
         camera_intrinsics = self.get_camera_intrinsics()
@@ -679,14 +806,18 @@ class R1ProControlApi(ApiBase):
         
         simple_pregrasp_pose, simple_grasp_pose = self.sample_grasp_pose_simple(object_name, obb)
         
-        grasp_sample, grasp_scores, grasp_contact_pts = (
-            self.grasp_net_plan_fn(
-                depth,
-                camera_intrinsics,
-                segmentation[:, :, 0],
-                queried_instance_idx,
+        try:
+            grasp_sample, grasp_scores, grasp_contact_pts = (
+                self.grasp_net_plan_fn(
+                    depth,
+                    camera_intrinsics,
+                    segmentation[:, :, 0],
+                    queried_instance_idx,
+                )
             )
-        )
+        except Exception as exc:
+            print(f"GraspNet planning failed for {object_name}: {exc}; using simple grasp poses")
+            return [simple_pregrasp_pose], [simple_grasp_pose]
         if len(grasp_sample) == 0:
             print(f"No graspnet detections for {object_name} using simple grasp poses")
             return [simple_pregrasp_pose], [simple_grasp_pose]
@@ -1160,7 +1291,12 @@ class R1ProControlApi(ApiBase):
             if success:
                 print("Reached waypoint", waypoint)
                 return True
-        return False
+        print("Navigation primitive failed; falling back to direct base interpolation")
+        target_joint_positions = self._env.get_joint_positions().clone()
+        target_joint_positions[0] = float(goal[0])
+        target_joint_positions[1] = float(goal[1])
+        target_joint_positions[5] = float(goal[2])
+        return self._env._move_to_joint_positions(target_joint_positions, max_steps=60, settle_steps=20)
         
   
     def move_hand(self, target_pose: tuple[np.ndarray, np.ndarray], arm=0) -> None:
@@ -1249,6 +1385,13 @@ class R1ProControlApi(ApiBase):
         obs = self._env.get_observation()
         rgb, depth = obs_get_rgb_depth(obs)
         rgb = rgb.cpu().numpy()[...,:3]    
+        if not self.use_sam3:
+            dets = self.owl_vit_det_fn(rgb, texts=[[object_name]])
+            if len(dets) == 0:
+                return False
+            scores = [det["score"] for det in dets]
+            return bool(np.max(scores) > self.sam3_score_threshold)
+
         results = self.sam3_seg_fn(rgb, text_prompt=object_name)
         if self.debug:
             visualize_sam3_results(
@@ -1442,11 +1585,11 @@ class R1ProControlApi(ApiBase):
         obs = self._env.get_observation()
         rgb, depth = obs_get_rgb_depth(obs)
         rgb = rgb.cpu().numpy()[...,:3]
-        plt.imshow(rgb)
-        plt.savefig(f'{name}_rgb.png')
+        Image.fromarray(rgb.astype(np.uint8)).save(f'{name}_rgb.png')
         external_rgb = self._env.env.external_sensors['external_camera'].get_obs()[0]['rgb'][:,:,:3]
-        plt.imshow(external_rgb)
-        plt.savefig(f'{name}_external_rgb.png')
+        if hasattr(external_rgb, "detach"):
+            external_rgb = external_rgb.detach().cpu().numpy()
+        Image.fromarray(external_rgb.astype(np.uint8)).save(f'{name}_external_rgb.png')
 
 
 def _draw_boxes(

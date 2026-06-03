@@ -1,0 +1,50 @@
+# Usage:
+#   source capx/third_party/b1k/.venv/bin/activate
+#   OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
+#   uv run --no-sync --active capx/envs/launch.py \
+#     --config-path env_configs/r1pro/r1pro_pick_up_radio_web_sam2.yaml \
+#     --model MiniMax-M2.7
+
+env:
+  _target_: capx.envs.tasks.r1pro.r1pro_pickup_radio.R1ProRadioCodeEnv
+  cfg:
+    _target_: capx.envs.tasks.base.CodeExecEnvConfig
+    low_level:
+      _target_: capx.envs.simulators.r1pro_b1k.R1ProBehaviourLowLevel
+      controller_cfg: r1pro_primitives_radio.yaml
+    privileged: false
+    apis:
+      - R1ProControlApiSAM2
+    prompt: |
+      You are controlling a R1Pro robot with API described below.
+      Goal: pick up the red radio on the table. You can use sample_grasp_pose to find grasp pose candidates for the object.
+      The visual pipeline uses OWL-ViT for text-conditioned object detection and SAM2 for box-conditioned segmentation. Do not call SAM3 APIs.
+      You may write python code comments for reasoning but ONLY write the executable Python code and do not write it in code fences.
+      The functions (APIs) below are already imported to the environment. If you want to use numpy, you need to import it explicitly.
+
+api_servers:
+  - _target_: capx.serving.launch_owlvit_server.main
+    device: cpu
+    port: 8117
+    host: 127.0.0.1
+    model_name: google/owlv2-large-patch14-ensemble
+
+  - _target_: capx.serving.launch_sam2_server.main
+    device: cpu
+    port: 8113
+    host: 127.0.0.1
+    model_name: facebook/sam2.1-hiera-large
+
+  - _target_: capx.serving.launch_contact_graspnet_server.main
+    port: 8115
+    host: 127.0.0.1
+
+record_video: true
+output_dir: ./outputs/r1pro_pick_up_radio_web_sam2
+
+trials: 1
+resume_idx: 1
+num_workers: 1
+use_oracle_code: false
+web_ui: true
+web_ui_port: 8200

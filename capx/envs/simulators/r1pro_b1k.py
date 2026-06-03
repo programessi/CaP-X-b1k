@@ -19,7 +19,7 @@ import sys
 import yaml
 try:
     import omnigibson as og
-except Exception as e:  # pragma: no cover - optional dependency
+except ModuleNotFoundError as e:  # pragma: no cover - optional dependency
     raise ModuleNotFoundError(
         "Behaviour not available; add submodule."
     ) from e
@@ -43,6 +43,20 @@ import math
 from omnigibson.action_primitives.curobo import (
     holonomic_base_command_in_world_frame,
 )
+
+
+def _meets_minimum_isaac_version(minimum_version: str) -> bool:
+    isaac_path = os.environ.get("ISAAC_PATH")
+    if not isaac_path:
+        return False
+    version_path = os.path.join(isaac_path, "VERSION")
+    if not os.path.exists(version_path):
+        return False
+
+    current_version = open(version_path, "r").read().strip().split("-")[0]
+    current = tuple(int(part) for part in current_version.split(".")[:3])
+    minimum = tuple(int(part) for part in minimum_version.split(".")[:3])
+    return current >= minimum
 from omnigibson.action_primitives.action_primitive_set_base import (
     ActionPrimitiveError,
 )
@@ -129,6 +143,11 @@ class R1ProBehaviourLowLevel(BaseEnv):
             self.controller_cfg['task']['activity_name'] = activity_name
             # Load all rooms so any task can find its required objects
             self.controller_cfg['scene']['load_room_types'] = None
+        if _meets_minimum_isaac_version("5.1.0"):
+            for robot_cfg in self.controller_cfg.get("robots", []):
+                obs_modalities = robot_cfg.get("obs_modalities")
+                if isinstance(obs_modalities, list) and "seg_instance" in obs_modalities:
+                    robot_cfg["obs_modalities"] = [modality for modality in obs_modalities if modality != "seg_instance"]
         self.task_name = self.controller_cfg['task']['activity_name']
         
         self._step_count = 0
@@ -168,7 +187,13 @@ class R1ProBehaviourLowLevel(BaseEnv):
         self.metrics = self.load_metrics()
         
         
-        self.controller = StarterSemanticActionPrimitives(self.env, self.env.robots[0], enable_head_tracking=False)
+        skip_curobo_initialization = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 12
+        self.controller = StarterSemanticActionPrimitives(
+            self.env,
+            self.env.robots[0],
+            enable_head_tracking=False,
+            skip_curobo_initilization=skip_curobo_initialization,
+        )
         # torso_joint = self.controller.robot.joints["torso_joint2"]
         self.torso_idx_map = {
             "torso_joint1": 6,
@@ -459,10 +484,39 @@ class R1ProBehaviourLowLevel(BaseEnv):
             success: Whether the pose was navigated to successfully.
         """
         try:
-            ctrl_gen = self.controller._navigate_to_pose(pose_2d) #, ignore_all_obstacles=True, skip_obstacle_update=True)
-            # execute_controller(ctrl_gen, self.env)
-            for a in ctrl_gen:
-                _ = self.step(a)
+            if self.controller._motion_generator is None:
+                # CuRobo is disabled (e.g. on Blackwell GPUs with CC >= 12).
+                # Teleport the robot base to the target pose.
+                import torch as th
+                robot_pos, robot_quat = self.robot.get_position_orientation()
+                if hasattr(self.robot, 'base_idx'):
+                    base_joints = self.robot.get_joint_positions()[self.robot.base_idx]
+                    # Preserve z, rx, ry; only change x, y, yaw
+                    pos = th.tensor(
+                        [float(pose_2d[0]), float(pose_2d[1]), float(base_joints[2])],
+                        dtype=th.float32,
+                    )
+                    euler = th.tensor(
+                        [float(base_joints[3]), float(base_joints[4]), float(pose_2d[2])],
+                        dtype=th.float32,
+                    )
+                    mat = th.as_tensor(robot_quat)  # placeholder, will be overwritten
+                    import omnigibson.utils.transform_utils as T
+                    mat = T.euler_intrinsic2mat(euler)
+                    orn = T.mat2quat(mat)
+                else:
+                    pos = th.tensor([float(pose_2d[0]), float(pose_2d[1]), 0.0], dtype=th.float32)
+                    orn = th.tensor([0.0, 0.0, 0.0, 1.0], dtype=th.float32)
+                self.robot.set_position_orientation(pos, orn)
+                # Settle the physics after teleport
+                for _ in range(20):
+                    _ = self.step(self.controller._empty_action())
+                print("Navigated to pose:", pose_2d)
+                return True
+            else:
+                ctrl_gen = self.controller._navigate_to_pose(pose_2d)
+                for a in ctrl_gen:
+                    _ = self.step(a)
         except TimeoutError:
             raise
         except Exception as e:

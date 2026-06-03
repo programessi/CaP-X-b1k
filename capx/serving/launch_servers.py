@@ -13,6 +13,9 @@ Or start a predefined server profile:
 
 from __future__ import annotations
 
+# Reduce CUDA memory fragmentation — MUST be set before any torch import
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 import json
 import logging
 import os
@@ -71,16 +74,16 @@ SERVER_REGISTRY: dict[str, dict[str, Any]] = {
     "sam2": {
         "target": "capx.serving.launch_sam2_server",
         "default_port": 8113,
-        "gpu_required": True,
-        "gpu_memory_mb": 6000,
-        "extra_args": {"device": "cuda"},
+        "gpu_required": False,
+        "gpu_memory_mb": 0,
+        "extra_args": {"device": "cpu"},
     },
     "owlvit": {
         "target": "capx.serving.launch_owlvit_server",
         "default_port": 8118,
-        "gpu_required": True,
-        "gpu_memory_mb": 3000,
-        "extra_args": {"device": "cuda"},
+        "gpu_required": False,
+        "gpu_memory_mb": 0,
+        "extra_args": {"device": "cpu"},
     },
     "curobo": {
         "target": "capx.serving.launch_curobo_server",
