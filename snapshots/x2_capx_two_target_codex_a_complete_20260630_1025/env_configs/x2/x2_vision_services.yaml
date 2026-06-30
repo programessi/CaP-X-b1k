@@ -1,0 +1,9 @@
+api_servers:
+  - _target_: capx.serving.launch_owlvit_server.main
+    host: 127.0.0.1
+    port: 8117
+    device: cpu
+  - _target_: capx.serving.launch_sam2_server.main
+    host: 127.0.0.1
+    port: 8113
+    device: cpu

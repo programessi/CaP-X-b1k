@@ -1,0 +1,105 @@
+{
+  "name": "x2_capx_two_target_codex_a_complete",
+  "accepted_date": "2026-06-30",
+  "repo_root": "/home/xingshu/workspaces/fys/CaP-X-b1k",
+  "base_git_commit": "99bde8c",
+  "environment": {
+    "conda_env": "behavior",
+    "behavior_root": "/home/xingshu/workspaces/fys/BEHAVIOR-1K",
+    "third_party_b1k_used": false
+  },
+  "scope": "X2 CaP-X BEHAVIOR simulation tabletop red-cube two-target visual pick-place baseline",
+  "snapshot": "snapshots/x2_capx_two_target_codex_a_complete_20260630_1025",
+  "contracts": {
+    "visual_to_action_pose": "T_world_tcp",
+    "llm_exposed_api": [
+      "pick_and_place_red_cube",
+      "pick_and_place_red_cube_to_left_target",
+      "pick_and_place_red_cube_to_right_target",
+      "pick_and_place_visual_object"
+    ],
+    "normal_llm_hidden_internal_apis": [
+      "plan_visual_grasp_tcp_pose",
+      "execute_tcp_grasp_plan",
+      "move_tcp_joint_ik",
+      "low-level IK/PyRoKi/gripper/env helpers"
+    ]
+  },
+  "core_files": {
+    "tasks": [
+      "capx/envs/tasks/x2/x2_pick_place_red_cube.py",
+      "capx/envs/tasks/x2/x2_pick_place_red_cube_two_targets.py",
+      "capx/envs/simulators/x2_b1k.py"
+    ],
+    "configs": [
+      "env_configs/x2/x2_pick_place_red_cube.yaml",
+      "env_configs/x2/x2_pick_place_red_cube_two_targets.yaml",
+      "env_configs/x2/x2_pick_place_red_cube_two_targets_left.yaml"
+    ],
+    "primitives": [
+      "capx/integrations/x2/control.py",
+      "capx/integrations/x2/vision.py",
+      "capx/integrations/motion/pyroki_snippets/_trajopt.py"
+    ],
+    "validation": [
+      "scripts/check_x2_acceptance.py",
+      "scripts/summarize_x2_runs.py",
+      "scripts/audit_x2_capx_integration.py",
+      "tests/test_x2_llm_api.py",
+      "tests/test_x2_run_summary.py"
+    ],
+    "llm_proxy": [
+      "capx/serving/codex_cli_server.py",
+      "scripts/run_x2_two_target_codex_a_non_oracle_smoke.sh",
+      "scripts/run_x2_two_target_codex_a_stability_and_check.sh"
+    ],
+    "readme_demo_videos": [
+      "docs/media/x2/x2_right_target_global.mp4",
+      "docs/media/x2/x2_right_target_robot.mp4",
+      "docs/media/x2/x2_left_target_global.mp4",
+      "docs/media/x2/x2_left_target_robot.mp4"
+    ]
+  },
+  "accepted_evidence": {
+    "stamp": "manual_codex_a_20260630_101117",
+    "right": {
+      "trial_dir": "outputs/stability/codex-a/two_targets_right_codex_a_stability_manual_codex_a_20260630_101117_run01/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1",
+      "generated_code": "outputs/stability/codex-a/two_targets_right_codex_a_stability_manual_codex_a_20260630_101117_run01/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/code.py",
+      "visual_artifacts": "outputs/x2_visual_artifacts/stability/two_targets_right_codex_a_stability_manual_codex_a_20260630_101117_run01/x2_pick_place_red_cube_20260630_101419_805",
+      "ok": true,
+      "reward": 1.0,
+      "task_completed": true,
+      "before_close_tcp_error_m": 0.015655039528970842,
+      "before_close_ori_error_rad": 0.0547740942117125,
+      "object_in_hand_after_close": true,
+      "place_error_m": 0.014131927921253392
+    },
+    "left": {
+      "trial_dir": "outputs/stability/codex-a/two_targets_left_codex_a_stability_manual_codex_a_20260630_101117_run01/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1",
+      "generated_code": "outputs/stability/codex-a/two_targets_left_codex_a_stability_manual_codex_a_20260630_101117_run01/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/code.py",
+      "visual_artifacts": "outputs/x2_visual_artifacts/stability/two_targets_left_codex_a_stability_manual_codex_a_20260630_101117_run01/x2_pick_place_red_cube_20260630_101910_210",
+      "ok": true,
+      "reward": 1.0,
+      "task_completed": true,
+      "before_close_tcp_error_m": 0.005309625868222024,
+      "before_close_ori_error_rad": 0.013709298176369174,
+      "object_in_hand_after_close": true,
+      "place_error_m": 0.003187055511323606
+    }
+  },
+  "validation_commands": [
+    "python scripts/check_x2_acceptance.py outputs/stability/codex-a/two_targets_*_codex_a_stability_manual_codex_a_20260630_101117_run*",
+    "python scripts/audit_x2_capx_integration.py --strict",
+    "env PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /home/xingshu/miniforge3/bin/conda run --no-capture-output -n behavior python -m pytest tests/test_x2_llm_api.py tests/test_x2_run_summary.py -q"
+  ],
+  "latest_validation": {
+    "acceptance": "X2_ACCEPTANCE PASS",
+    "audit": "X2_INTEGRATION_AUDIT COMPLETE",
+    "pytest": "10 passed"
+  },
+  "notes": [
+    "Large videos and visual artifacts are referenced in outputs/ and are not copied into the source snapshot.",
+    "The current guarded tabletop route uses simulation-known table/object boxes with engineering inflation margins.",
+    "This baseline is accepted for CaP-X simulation integration, not for sim2real obstacle perception."
+  ]
+}

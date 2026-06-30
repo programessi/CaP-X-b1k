@@ -1,0 +1,101 @@
+# Usage:
+#   OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 \
+#   python capx/envs/launch.py --config-path env_configs/x2/x2_pick_place_red_cube_two_targets.yaml
+#
+# Second short-term X2 CaP-X simulation task. It reuses the validated red-cube
+# visual/action primitive but asks generated code to choose the right marker
+# among two tabletop targets.
+
+env:
+  _target_: capx.envs.tasks.x2.x2_pick_place_red_cube_two_targets.X2PickPlaceRedCubeTwoTargetsCodeEnv
+  cfg:
+    _target_: capx.envs.tasks.base.CodeExecEnvConfig
+    low_level:
+      _target_: capx.envs.simulators.x2_b1k.X2BehaviourLowLevel
+      controller_cfg: x2_robotiq85_joint_primitives.yaml
+      objects:
+        - type: PrimitiveObject
+          name: x2_pick_place_table
+          primitive_type: Cube
+          size: 1.0
+          scale: [0.22, 0.22, 0.012]
+          position: [0.32, -0.015, 0.895]
+          orientation: [0, 0, 0, 1]
+          fixed_base: true
+          rgba: [0.35, 0.35, 0.35, 1.0]
+        - type: PrimitiveObject
+          name: x2_pick_place_red_cube
+          primitive_type: Cube
+          size: 0.04
+          position: [0.32, -0.08, 0.921]
+          orientation: [0, 0, 0, 1]
+          fixed_base: false
+          rgba: [1.0, 0.02, 0.02, 1.0]
+        - type: PrimitiveObject
+          name: x2_pick_place_left_target_marker
+          primitive_type: Sphere
+          radius: 0.012
+          position: [0.27, 0.055, 0.921]
+          orientation: [0, 0, 0, 1]
+          fixed_base: true
+          kinematic_only: true
+          visual_only: true
+          rgba: [0.0, 0.85, 0.18, 1.0]
+        - type: PrimitiveObject
+          name: x2_pick_place_right_target_marker
+          primitive_type: Sphere
+          radius: 0.012
+          position: [0.37, 0.055, 0.921]
+          orientation: [0, 0, 0, 1]
+          fixed_base: true
+          kinematic_only: true
+          visual_only: true
+          rgba: [0.0, 0.25, 1.0, 1.0]
+      external_sensors:
+        - sensor_type: VisionSensor
+          name: global_camera
+          relative_prim_path: /global_camera
+          modalities: [rgb, depth_linear]
+          sensor_kwargs:
+            image_height: 384
+            image_width: 384
+          position: [0.85, -1.05, 1.45]
+          orientation: [0.467415, 0.155805, 0.275181, 0.825544]
+      load_object_categories: [floors, ceilings, walls]
+      robot_camera_arm: 1
+      robot_camera_resolution: 384
+      robot_obs_modalities: [rgb, depth, depth_linear]
+      chest_camera: true
+      chest_camera_resolution: 384
+    privileged: false
+    apis:
+      - X2PickPlaceApi
+
+api_servers:
+  - _target_: capx.serving.launch_owlvit_server.main
+    host: 127.0.0.1
+    port: 8117
+    device: cpu
+    model_name: google/owlv2-large-patch14-ensemble
+
+  - _target_: capx.serving.launch_sam2_server.main
+    host: 127.0.0.1
+    port: 8113
+    device: cuda
+    model_name: facebook/sam2.1-hiera-large
+
+  - _target_: capx.serving.launch_contact_graspnet_server.main
+    host: 127.0.0.1
+    port: 8115
+    device: cuda
+
+record_video: true
+output_dir: ./outputs/x2_pick_place_red_cube_two_targets
+
+trials: 1
+resume_idx: 1
+num_workers: 1
+use_oracle_code: true
+use_visual_feedback: false
+use_img_differencing: false
+web_ui: false

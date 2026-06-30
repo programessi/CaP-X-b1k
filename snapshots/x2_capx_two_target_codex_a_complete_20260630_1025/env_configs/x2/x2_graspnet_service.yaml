@@ -1,0 +1,5 @@
+api_servers:
+  - _target_: capx.serving.launch_contact_graspnet_server.main
+    host: 127.0.0.1
+    port: 8125
+    device: cuda

@@ -1,0 +1,137 @@
+# X2 LLM-Facing Primitives
+
+These are the primitives that should be shown to an LLM for the current
+short-term X2 CaP-X tabletop simulation phase.
+
+The accepted pick-place task config uses `X2PickPlaceApi`, a reduced wrapper
+around `X2ControlApi`. It intentionally exposes only the task-level primitive
+and a few safe helpers. Use the full `X2VisualGraspApi` / `X2ControlApi` only
+for debugging lower-level visual or motion contracts.
+
+## Coordinate Contract
+
+```text
+Visual grasp output: T_world_tcp
+Action target input: T_world_tcp
+Place target:        world-frame object center position [x, y, z]
+```
+
+Do not execute raw GraspNet poses directly. X2 APIs adapt raw GraspNet poses
+into X2 TCP targets before motion. If EEF targets are needed internally, the X2
+API converts TCP to EEF.
+
+## Task-Level Primitive
+
+For the current red-cube task, expose this narrow primitive to the LLM:
+
+```python
+pick_and_place_red_cube(place_position=None, place_position_threshold=0.10)
+```
+
+Use it for `env_configs/x2/x2_pick_place_red_cube.yaml`. It fixes the task
+object, table, chest camera, prompts, validated TCP orientation prior,
+workspace bounds, sim-known table/cube obstacles, elevated placement
+correction, and a short ranked GraspNet candidate retry list. It also caches
+the first result, so accidental duplicate LLM calls in one generated program do
+not command a second robot execution.
+
+The reusable visual pick-place primitive remains:
+
+```python
+pick_and_place_visual_object(
+    object_name,
+    place_position,
+    prompts=None,
+    camera_name=None,
+    arm=1,
+    table_name=None,
+    orientation_quat_xyzw=None,
+    workspace_bounds=None,
+    candidate_indices=None,
+    place_position_threshold=0.10,
+    use_sim_known_obstacles=True,
+    sim_place_correction_steps=2,
+)
+```
+
+Use this for simple tabletop pick-place tasks. It runs:
+
+```text
+settle/open gripper
+-> OWL-ViT detection
+-> SAM2 segmentation
+-> GraspNet grasp generation
+-> X2 TCP grasp selection
+-> optional ranked candidate retry
+-> optional sim-known table/object obstacle boxes
+-> PyRoKi precontact motion
+-> TCP insertion
+-> close gripper
+-> abort place leg if the gripper is empty after close
+-> lift and transfer
+-> optional sim-known object-center correction above the place target
+-> mostly vertical descent to the release pose
+-> release
+```
+
+Returns a dict with `ok`, `plan`, `obstacles_world`, and `execution`.
+
+## Lower-Level Visual Primitive
+
+```python
+plan_visual_grasp_tcp_pose(object_name, prompts=None, camera_name=None, arm=1, ...)
+```
+
+Runs the visual chain only. It does not move the robot. On success it returns
+`grasp_tcp_pose`, `precontact_tcp_pose`, and `insertion_waypoints`, all as
+`T_world_tcp`.
+
+## Lower-Level Action Primitive
+
+```python
+execute_tcp_grasp_plan(plan, arm=1, place_position=None, obstacles_world=None, ...)
+```
+
+Consumes the plan from `plan_visual_grasp_tcp_pose()`. It opens the gripper,
+moves to precontact, inserts to the grasp TCP pose, closes the gripper, and can
+optionally lift/place/release the object.
+
+`ok=True` means the before-close TCP target was reached and, if
+`place_position` is provided, the object was detected in hand after closing and
+the released object center is within `place_position_threshold`.
+
+When `skip_place_if_no_object_in_hand=True`, the action primitive opens the
+gripper and retreats to precontact instead of continuing an empty-handed place
+leg. The task-level visual wrapper uses this behavior before trying another
+ranked GraspNet candidate.
+
+## Sim-Only Helper
+
+```python
+get_sim_known_tabletop_obstacles(object_name, table_name)
+```
+
+Builds inflated PyRoKi box obstacles from current OmniGibson scene AABBs for
+the object and table. This is for short-term simulation integration only. It is
+not a 2real perception primitive.
+
+`sim_place_correction_steps` in `pick_and_place_visual_object()` /
+`execute_tcp_grasp_plan()` is also sim-only because it reads the sim-known
+object center before release. The current pick-place baseline applies this
+correction at the elevated pre-release pose above the target, then descends
+mostly vertically to avoid dragging the cube across the tabletop.
+
+## Basic Motion Helpers
+
+```python
+get_chest_camera_name()
+open_gripper(arm=1)
+close_gripper(arm=1)
+settle_robot(steps=...)
+get_current_tcp_pose(arm=1)
+move_tcp_joint_ik(tcp_pose, arm=1, ...)
+move_tcp_pyroki_trajopt(tcp_pose, arm=1, obstacles_world=None, ...)
+```
+
+Use these only when the task needs lower-level debugging or custom motion.
+For ordinary pick-place, prefer `pick_and_place_visual_object()`.
