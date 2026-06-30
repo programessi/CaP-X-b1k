@@ -104,6 +104,77 @@ CaP-X queries language models through a local proxy server that exposes an OpenA
 
 OpenRouter provides access to Gemini, GPT, Claude, DeepSeek, Qwen, and other models through a single API key.
 
+### Local codex-a GPT configuration
+
+If the GPT API key is already configured in the local `codex-a` command, use
+the X2 codex-a scripts. They start `capx/serving/codex_cli_server.py`, expose a
+local OpenAI-compatible `/chat/completions` endpoint, and delegate code
+generation to the user's local Codex CLI configuration.
+
+```bash
+REPEATS=1 \
+scripts/run_x2_two_target_codex_a_stability_and_check.sh
+```
+
+If the local executable is named `codex` instead of `codex-a`, override it:
+
+```bash
+CODEX_BIN=codex REPEATS=1 scripts/run_x2_two_target_codex_a_stability_and_check.sh
+```
+
+On this workstation `codex-a` may be a shell alias for
+`codex -c 'model_provider="axonhub"'`. Non-interactive scripts do not see shell
+aliases, so the X2 codex-a script defaults to the equivalent executable form:
+`CODEX_BIN=codex` and `CODEX_MODEL_PROVIDER=axonhub`.
+
+### Generic OpenAI-compatible direct APIs
+
+`capx/serving/openrouter_server.py` is also a generic OpenAI-compatible proxy:
+set `--base-url` to your provider endpoint and pass a local key file. Use this
+path when you want to bypass the local Codex CLI and call an explicit
+OpenAI-compatible endpoint directly.
+
+```bash
+env ALL_PROXY=http://127.0.0.1:7897/ all_proxy=http://127.0.0.1:7897/ \
+/home/xingshu/miniforge3/bin/conda run --no-capture-output -n behavior \
+python capx/serving/openrouter_server.py \
+  --key-file .openai_key \
+  --base-url https://api.openai.com/v1/ \
+  --host 127.0.0.1 \
+  --port 8110
+```
+
+The `ALL_PROXY` override is only needed when the shell has a `socks://...`
+proxy value and the installed `httpx` version rejects that scheme at startup.
+If your environment does not define `ALL_PROXY=socks://...`, omit the override.
+
+X2 two-target direct API smoke:
+
+```bash
+MODEL=gpt-5 \
+SERVER_URL=http://127.0.0.1:8110/chat/completions \
+scripts/run_x2_two_target_api_non_oracle_smoke.sh
+```
+
+X2 right/left stability loop:
+
+```bash
+REPEATS=1 \
+STAMP=<STAMP> \
+MODEL=gpt-5 \
+SERVER_URL=http://127.0.0.1:8110/chat/completions \
+scripts/run_x2_two_target_api_stability_smoke.sh
+```
+
+Summarize saved local outputs:
+
+```bash
+python scripts/summarize_x2_runs.py outputs/stability/two_targets_*_api_stability_<STAMP>_run*
+```
+
+The summary command does not contact any external API. It reads saved CaP-X
+outputs, generated code, metrics, videos, and X2 visual artifacts.
+
 ### Option B: vLLM (local models)
 
 ```bash
