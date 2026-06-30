@@ -17,6 +17,12 @@ Two-target codex-a non-oracle smoke, using the user's local Codex CLI config:
 scripts/run_x2_two_target_codex_a_non_oracle_smoke.sh
 ```
 
+Two-object blue-cube-to-right codex-a non-oracle smoke:
+
+```bash
+scripts/run_x2_two_object_blue_right_codex_a_non_oracle_smoke.sh
+```
+
 Two-target codex-a stability loop plus local summary and acceptance check:
 
 ```bash
@@ -55,10 +61,17 @@ Two-target oracle stability loop:
 scripts/run_x2_two_target_oracle_stability_smoke.sh
 ```
 
+Two-object blue-cube-to-right oracle smoke:
+
+```bash
+scripts/run_x2_two_object_blue_right_oracle_smoke.sh
+```
+
 Summarize saved X2 runs:
 
 ```bash
 python scripts/summarize_x2_runs.py outputs/stability/two_targets_*_api_stability_<STAMP>_run*
+python scripts/summarize_x2_runs.py outputs/codex-a/x2_pick_place_two_objects_blue_right_codex_a_non_oracle_<STAMP>
 ```
 
 Check saved X2 runs against the current acceptance gate:

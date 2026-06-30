@@ -5,6 +5,7 @@ from capx.envs.tasks.x2.x2_pick_place_red_cube_two_targets import (
     X2PickPlaceRedCubeTwoTargetsCodeEnv,
     X2PickPlaceRedCubeTwoTargetsLeftCodeEnv,
 )
+from capx.envs.tasks.x2.x2_pick_place_two_objects import X2PickPlaceTwoObjectsBlueRightCodeEnv
 
 
 class _DummyEnv:
@@ -54,6 +55,20 @@ def test_x2_two_target_task_variants_select_expected_primitives():
     assert X2PickPlaceRedCubeTwoTargetsLeftCodeEnv.oracle_code.strip().splitlines()[0] == (
         "RESULT = pick_and_place_red_cube_to_left_target()"
     )
+
+
+def test_x2_two_object_task_uses_generic_visual_pick_place_primitive():
+    prompt = X2PickPlaceTwoObjectsBlueRightCodeEnv.prompt
+    oracle = X2PickPlaceTwoObjectsBlueRightCodeEnv.oracle_code
+
+    assert X2PickPlaceTwoObjectsBlueRightCodeEnv.target_object_name == "x2_pick_place_blue_cube"
+    assert X2PickPlaceTwoObjectsBlueRightCodeEnv.distractor_object_name == "x2_pick_place_red_cube"
+    assert 'pick_and_place_visual_object(' in prompt
+    assert 'pick_and_place_visual_object(' in oracle
+    assert 'prompts=["blue cube", "blue block", "blue box"]' in oracle
+    assert "pick_and_place_red_cube_to_right_target" not in oracle
+    assert "plan_visual_grasp_tcp_pose" not in oracle
+    assert "execute_tcp_grasp_plan" not in oracle
 
 
 def test_x2_integration_status_documents_current_acceptance_boundary():

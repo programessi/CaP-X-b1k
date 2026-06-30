@@ -15,11 +15,11 @@ from typing import Any
 
 
 RESULT_RE = re.compile(
-    r"X2_(?:TWO_TARGET_|PICK_PLACE_)?RESULT\s+"
+    r"X2_(?:TWO_TARGET_|TWO_OBJECT_|PICK_PLACE_)?RESULT\s+"
     r"(?P<fields>.*?)(?=\nX2_|\n\s*Stderr:|\Z)",
     re.DOTALL,
 )
-ATTEMPT_RE = re.compile(r"X2_TWO_TARGET_ATTEMPT\s+(?P<fields>.*)")
+ATTEMPT_RE = re.compile(r"X2_(?:TWO_TARGET|TWO_OBJECT)_ATTEMPT\s+(?P<fields>.*)")
 
 
 def _parse_fields(text: str) -> dict[str, str]:

@@ -25,6 +25,9 @@ simulation:
   fine-align hold-step hardening.
 - Right-target and left-target `codex-a` non-oracle stability runs passed with
   generated code that calls only the reduced X2 task-level primitive API.
+- The two-object extension passed oracle and `codex-a` non-oracle runs where
+  generated code selected the blue cube through `pick_and_place_visual_object`
+  and placed it at the right marker.
 - `scripts/check_x2_acceptance.py` and
   `scripts/audit_x2_capx_integration.py --strict` both pass.
 
@@ -55,7 +58,14 @@ Two targets, left marker:
 env_configs/x2/x2_pick_place_red_cube_two_targets_left.yaml
 ```
 
-All three tasks use `X2PickPlaceApi`; ordinary generated code should not create
+Two objects, choose blue cube and place at right marker:
+
+```text
+env_configs/x2/x2_pick_place_two_objects_blue_right.yaml
+docs/x2-two-object-blue-right-extension-20260630.md
+```
+
+These tasks use `X2PickPlaceApi`; ordinary generated code should not create
 the scene, reset the simulator, instantiate robots, or call low-level camera,
 IK, PyRoKi, GraspNet, or gripper helpers directly.
 
@@ -191,6 +201,42 @@ The complete accepted source/config/test snapshot is:
 snapshots/x2_capx_two_target_codex_a_complete_20260630_1025/
 ```
 
+Two-object blue-cube extension evidence:
+
+```text
+Oracle:
+outputs/oracle/oracle/x2_pick_place_two_objects_blue_right_run03/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/
+
+before_close_tcp_error_m=0.008206982467097177
+before_close_ori_error_rad=0.021700898689255475
+object_in_hand_after_close=True
+place_error_m=0.009616035120709184
+Reward=1.0
+Task Completed=True
+
+Codex/GPT non-oracle:
+outputs/codex-a/x2_pick_place_two_objects_blue_right_codex_a_non_oracle_manual_codex_a_two_object_retry02_20260630_160157/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/
+
+before_close_tcp_error_m=0.014342061390082383
+before_close_ori_error_rad=0.0467510987482574
+object_in_hand_after_close=True
+place_error_m=0.01886219526172648
+Reward=1.0
+Task Completed=True
+```
+
+The non-oracle generated program called only:
+
+```python
+RESULT = pick_and_place_visual_object(...)
+```
+
+The full extension record is:
+
+```text
+docs/x2-two-object-blue-right-extension-20260630.md
+```
+
 ## Re-run Non-Oracle Evidence
 
 If the GPT API key is already configured in the local `codex-a` command, use
@@ -226,6 +272,7 @@ Summarize the saved outputs:
 python scripts/summarize_x2_runs.py outputs/stability/two_targets_*_api_stability_<STAMP>_run*
 python scripts/summarize_x2_runs.py outputs/stability/two_targets_*_codex_a_stability_<STAMP>_run*
 python scripts/summarize_x2_runs.py outputs/stability/*/two_targets_*_codex_a_stability_<STAMP>_run*
+python scripts/summarize_x2_runs.py outputs/codex-a/x2_pick_place_two_objects_blue_right_codex_a_non_oracle_<STAMP>
 ```
 
 Run the acceptance checker:

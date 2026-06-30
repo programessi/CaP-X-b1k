@@ -244,6 +244,8 @@ def _strip_reasoning_text(text: str) -> str:
 
     Leaves Python code lines intact (comments, imports, assignments, etc.).
     """
+    import ast
+
     lines = text.splitlines()
     # Remove leading non-Python lines (natural language prose)
     while lines:
@@ -254,6 +256,15 @@ def _strip_reasoning_text(text: str) -> str:
         if _is_python_line(stripped):
             break
         lines.pop(0)
+
+    candidate = "\n".join(lines).strip()
+    if candidate:
+        try:
+            ast.parse(candidate)
+            return candidate
+        except SyntaxError:
+            pass
+
     # Remove trailing non-Python lines
     while lines:
         stripped = lines[-1].strip()
@@ -271,6 +282,12 @@ def _is_python_line(line: str) -> bool:
     line = line.strip()
     if not line:
         return True  # blank lines are fine
+    # Continuation-only lines are valid inside multi-line Python expressions,
+    # e.g. a model may output a bare ")" that closes a function call.
+    if line in {")", "]", "}", "),", "],", "},"}:
+        return True
+    if line[0] in ")]}":
+        return True
     # Python comment
     if line.startswith("#"):
         return True

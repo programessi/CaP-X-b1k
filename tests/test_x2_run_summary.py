@@ -147,6 +147,41 @@ def test_summarize_x2_runs_parses_trial_metrics_and_artifacts(tmp_path):
     assert rows[0]["visual_artifact_dirs"] == [str(visual_dir)]
 
 
+def test_summarize_x2_runs_parses_two_object_result(tmp_path):
+    module = _load_summary_module()
+    run_name = "two_objects_blue_right_oracle_smoke"
+    trial_dir = (
+        tmp_path
+        / "outputs"
+        / "oracle"
+        / run_name
+        / "trial_01_sandboxrc_0_reward_1.000_taskcompleted_1"
+    )
+    trial_dir.mkdir(parents=True)
+    (trial_dir / "summary.txt").write_text(
+        "\n".join(
+            [
+                "Environment response:",
+                "  Stdout: X2_TWO_OBJECT_RESULT ok=True object=x2_pick_place_blue_cube target=right "
+                "before_close_tcp_error_m=0.009 before_close_ori_error_rad=0.020 "
+                "object_in_hand_after_close=True place_error_m=0.031",
+                "X2_TWO_OBJECT_ATTEMPT candidate_index=1 ok=True before_close_reached=True "
+                "object_in_hand_after_close=True before_close_tcp_error_m=0.009 "
+                "before_close_ori_error_rad=0.020",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    row = module._parse_trial(tmp_path, trial_dir)
+
+    assert row["result"]["ok"] == "True"
+    assert row["result"]["object"] == "x2_pick_place_blue_cube"
+    assert row["result"]["target"] == "right"
+    assert row["result"]["before_close_tcp_error_m"] == "0.009"
+    assert row["attempts"][0]["candidate_index"] == "1"
+
+
 def test_check_x2_acceptance_passes_right_and_left_runs(tmp_path):
     module = _load_acceptance_module()
     right = _write_trial(tmp_path, run_name="two_targets_right_api_stability_stamp_run01", target="right")
