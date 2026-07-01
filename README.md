@@ -15,6 +15,7 @@
 - **X2 visual pick-place is integrated into CaP-X.** The accepted baseline runs a red-cube tabletop task with OWL-ViT/SAM2-style perception, GraspNet grasp generation, PyRoKi-assisted approach planning, joint-IK execution, gripper control, transfer, and release.
 - **The LLM-facing X2 API is intentionally small.** Generated task code calls task-level primitives such as `pick_and_place_red_cube_to_right_target()` instead of directly manipulating IK, cameras, GraspNet, PyRoKi, or simulator setup.
 - **The current X2 non-oracle baseline is accepted.** Right and left target runs both passed video recording, visual artifact checks, grasp/placement metrics, and strict local integration audit.
+- **An experimental X2 RGB-D visual route is available.** The blue-cube two-object task can estimate object/table obstacle boxes from RGB-D, reobserve once at precontact, and execute a slower vertical place descent.
 - **This repo uses the sibling BEHAVIOR checkout.** X2 validation uses `/home/xingshu/workspaces/fys/BEHAVIOR-1K`, not `capx/third_party/b1k`.
 
 ## X2 Demo
@@ -38,12 +39,49 @@ Accepted run summary:
 | Right | 1.0 | 1 | 0.0157 m | 0.0548 rad | 0.0141 m |
 | Left | 1.0 | 1 | 0.0053 m | 0.0137 rad | 0.0032 m |
 
+### Experimental X2 RGB-D Visual Route
+
+This route keeps the same CaP-X injected-code shape, but explicitly asks
+`pick_and_place_visual_object(...)` to use RGB-D-derived obstacle boxes instead
+of sim-known object/table AABBs:
+
+```python
+RESULT = pick_and_place_visual_object(
+    "x2_pick_place_blue_cube",
+    [0.37, 0.055, 0.921],
+    prompts=["blue cube", "blue block", "blue box"],
+    table_name="x2_pick_place_table",
+    obstacle_source="rgbd_visual",
+    place_offset_source="visual_grasp_pose",
+    sim_place_correction_steps=0,
+    candidate_indices=(1, 2),
+    reobserve_at_precontact=True,
+)
+```
+
+| Task | Global View | Robot View |
+|------|-------------|------------|
+| Blue cube, RGB-D obstacles | <video src="docs/media/x2/x2_rgbd_visual_blue_right_global.mp4" controls width="320"></video><br>[download](docs/media/x2/x2_rgbd_visual_blue_right_global.mp4) | <video src="docs/media/x2/x2_rgbd_visual_blue_right_robot.mp4" controls width="320"></video><br>[download](docs/media/x2/x2_rgbd_visual_blue_right_robot.mp4) |
+
+Successful oracle smoke summary:
+
+| Route | Reward | Task Completed | TCP Error Before Close | Orientation Error | Place Error | Reobserve |
+|-------|-------:|---------------:|-----------------------:|------------------:|------------:|-----------|
+| RGB-D visual blue cube | 1.0 | 1 | 0.0115 m | 0.0322 rad | 0.0241 m | adopted |
+
+The planning obstacles in this route are `sim_truth=False`: the object box is
+estimated from the target SAM2 mask and depth points, and the table box is
+estimated from RGB-D points outside the target mask. Simulation is still used
+for task reward, `object_in_hand_after_close`, and final placement evaluation.
+
 Baseline record:
 
 - [Accepted X2 baseline](docs/x2-accepted-baseline-20260630.md)
 - [Machine-readable manifest](docs/x2-accepted-baseline-20260630.manifest.json)
 - [Snapshot](snapshots/x2_capx_two_target_codex_a_complete_20260630_1025)
 - [LLM-facing X2 primitives](docs/x2-llm-facing-primitives.md)
+- [RGB-D visual obstacle upgrade](docs/x2-rgbd-visual-obstacle-upgrade-20260630.md)
+- [Visual grasp and obstacle-planning math notes](docs/x2-visual-grasp-obstacle-planning-math.md)
 
 Quick validation:
 
@@ -371,6 +409,25 @@ docs/x2-accepted-baseline-20260630.md
 snapshots/x2_capx_two_target_codex_a_complete_20260630_1025
 ```
 
+实验性 RGB-D visual obstacle 路线使用蓝方块双物体任务，显式关闭
+sim-known obstacle / after-close sim-known placement offset：
+
+```bash
+STAMP=manual_rgbd_visual_reobserve_fast_$(date +%Y%m%d_%H%M%S) \
+OUTPUT_DIR=./outputs/oracle/x2_pick_place_two_objects_blue_right_rgbd_visual_${STAMP} \
+VISUAL_ARTIFACT_DIR=./outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_${STAMP} \
+TIMEOUT_SECONDS=1200 \
+scripts/run_x2_two_object_blue_right_rgbd_visual_oracle_smoke.sh
+```
+
+当前成功证据和技术路线见：
+
+```text
+docs/x2-rgbd-visual-obstacle-upgrade-20260630.md
+docs/x2-visual-grasp-obstacle-planning-math.md
+env_configs/x2/x2_pick_place_two_objects_blue_right_rgbd_visual.yaml
+```
+
 历史两目标稳定快照见：
 
 ```text
@@ -389,7 +446,7 @@ snapshots/x2_two_target_stability_hold_baseline_20260629_1330
 |------|------|------|
 | **R1Pro 专项** | 6 个 | `r1pro_pick_up_radio.yaml`, `r1pro_pick_up_trash.yaml` 及其 oracle/multiturn 变体 |
 | **B1K 通用** | 48 个 | `b1k_assembling_gift_baskets.yaml`, `b1k_chop_an_onion.yaml` 等 |
-| **X2 tabletop** | 3 个基线/扩展任务 | `x2_pick_place_red_cube.yaml`, `x2_pick_place_red_cube_two_targets.yaml`, `x2_pick_place_red_cube_two_targets_left.yaml` |
+| **X2 tabletop** | 5 个基线/扩展任务 | `x2_pick_place_red_cube.yaml`, `x2_pick_place_red_cube_two_targets.yaml`, `x2_pick_place_red_cube_two_targets_left.yaml`, `x2_pick_place_two_objects_blue_right.yaml`, `x2_pick_place_two_objects_blue_right_rgbd_visual.yaml` |
 
 R1Pro / B1K 详见 [docs/behavior-tasks.md](docs/behavior-tasks.md)。X2 当前基线详见 [docs/x2-pick-place-current-baseline.md](docs/x2-pick-place-current-baseline.md)。
 
@@ -407,6 +464,8 @@ R1Pro / B1K 详见 [docs/behavior-tasks.md](docs/behavior-tasks.md)。X2 当前�
 | [X2 集成状态](docs/x2-capx-integration-status.md) | X2 导入 CaP-X 的完成项、验收证据和后续扩展方向 |
 | [X2 当前基线](docs/x2-pick-place-current-baseline.md) | X2 red-cube pick-place 调用链、指标、复现命令 |
 | [X2 LLM 原语](docs/x2-llm-facing-primitives.md) | X2 给 LLM 暴露的任务级/视觉/动作原语 |
+| [X2 RGB-D 视觉障碍物升级](docs/x2-rgbd-visual-obstacle-upgrade-20260630.md) | X2 RGB-D obstacle route、precontact reobserve、slow place descent 和成功证据 |
+| [X2 视觉抓取/避障数学说明](docs/x2-visual-grasp-obstacle-planning-math.md) | RGB-D 反投影、box obstacle、TCP/EEF、PyRoKi trajopt 目标函数 |
 | [X2 版本管理](docs/x2-version-management.md) | X2 成功路径、snapshot 和历史输出管理 |
 | [真机 Franka Panda](docs/real-franka.md) | 真机部署、QuickStart |
 | [RL 训练](docs/rl-training.md) | CaP-RL + GRPO/VeRL、sim-to-real 迁移 |
