@@ -15,7 +15,7 @@
 - **X2 visual pick-place is integrated into CaP-X.** The accepted baseline runs a red-cube tabletop task with OWL-ViT/SAM2-style perception, GraspNet grasp generation, PyRoKi-assisted approach planning, joint-IK execution, gripper control, transfer, and release.
 - **The LLM-facing X2 API is intentionally small.** Generated task code calls task-level primitives such as `pick_and_place_red_cube_to_right_target()` instead of directly manipulating IK, cameras, GraspNet, PyRoKi, or simulator setup.
 - **The current X2 non-oracle baseline is accepted.** Right and left target runs both passed video recording, visual artifact checks, grasp/placement metrics, and strict local integration audit.
-- **An experimental X2 RGB-D visual route is available.** The blue-cube two-object task can estimate object/table obstacle boxes from RGB-D, reobserve once at precontact, and execute a slower vertical place descent.
+- **An experimental X2 RGB-D visual route is available.** The blue-cube two-object task can estimate object/table obstacle boxes from RGB-D, reobserve once at precontact, execute a slower vertical place descent, and pass both oracle and `codex-a` non-oracle smoke tests.
 - **This repo uses the sibling BEHAVIOR checkout.** X2 validation uses `/home/xingshu/workspaces/fys/BEHAVIOR-1K`, not `capx/third_party/b1k`.
 
 ## X2 Demo
@@ -63,11 +63,11 @@ RESULT = pick_and_place_visual_object(
 |------|-------------|------------|
 | Blue cube, RGB-D obstacles | <video src="docs/media/x2/x2_rgbd_visual_blue_right_global.mp4" controls width="320"></video><br>[download](docs/media/x2/x2_rgbd_visual_blue_right_global.mp4) | <video src="docs/media/x2/x2_rgbd_visual_blue_right_robot.mp4" controls width="320"></video><br>[download](docs/media/x2/x2_rgbd_visual_blue_right_robot.mp4) |
 
-Successful oracle smoke summary:
+Successful `codex-a` non-oracle smoke summary:
 
 | Route | Reward | Task Completed | TCP Error Before Close | Orientation Error | Place Error | Reobserve |
 |-------|-------:|---------------:|-----------------------:|------------------:|------------:|-----------|
-| RGB-D visual blue cube | 1.0 | 1 | 0.0115 m | 0.0322 rad | 0.0241 m | adopted |
+| RGB-D visual blue cube | 1.0 | 1 | 0.0109 m | 0.0267 rad | 0.0192 m | adopted |
 
 The planning obstacles in this route are `sim_truth=False`: the object box is
 estimated from the target SAM2 mask and depth points, and the table box is
@@ -410,7 +410,16 @@ snapshots/x2_capx_two_target_codex_a_complete_20260630_1025
 ```
 
 实验性 RGB-D visual obstacle 路线使用蓝方块双物体任务，显式关闭
-sim-known obstacle / after-close sim-known placement offset：
+sim-known obstacle / after-close sim-known placement offset。`codex-a`
+非 oracle 闭环入口：
+
+```bash
+STAMP=manual_rgbd_visual_codex_a_$(date +%Y%m%d_%H%M%S) \
+TIMEOUT_SECONDS=1200 \
+scripts/run_x2_two_object_blue_right_rgbd_visual_codex_a_non_oracle_smoke.sh
+```
+
+oracle 调试入口：
 
 ```bash
 STAMP=manual_rgbd_visual_reobserve_fast_$(date +%Y%m%d_%H%M%S) \

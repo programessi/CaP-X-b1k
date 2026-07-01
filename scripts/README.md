@@ -73,6 +73,12 @@ Two-object experimental RGB-D visual obstacle oracle smoke:
 scripts/run_x2_two_object_blue_right_rgbd_visual_oracle_smoke.sh
 ```
 
+Two-object experimental RGB-D visual obstacle codex-a non-oracle smoke:
+
+```bash
+scripts/run_x2_two_object_blue_right_rgbd_visual_codex_a_non_oracle_smoke.sh
+```
+
 This route uses RGB-D object/table obstacle boxes, visual grasp-pose place
 offset, precontact one-shot reobserve with quality-gated fallback, and slow
 vertical place descent. Summaries should show `reobserve_adopted`,
@@ -84,6 +90,7 @@ Summarize saved X2 runs:
 ```bash
 python scripts/summarize_x2_runs.py outputs/stability/two_targets_*_api_stability_<STAMP>_run*
 python scripts/summarize_x2_runs.py outputs/codex-a/x2_pick_place_two_objects_blue_right_codex_a_non_oracle_<STAMP>
+python scripts/summarize_x2_runs.py outputs/codex-a/x2_pick_place_two_objects_blue_right_rgbd_visual_codex_a_non_oracle_<STAMP>
 ```
 
 Check saved X2 runs against the current acceptance gate:
