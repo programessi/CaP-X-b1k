@@ -96,10 +96,24 @@ register_config(
     ),
 )
 
-from .x2.x2_pick_place_two_objects import X2PickPlaceTwoObjectsBlueRightCodeEnv
+from .x2.x2_pick_place_two_objects import (
+    X2PickPlaceTwoObjectsBlueRightCodeEnv,
+    X2PickPlaceTwoObjectsBlueRightRgbdVisualCodeEnv,
+)
 register_exec_env("x2_pick_place_two_objects_blue_right_code_env", X2PickPlaceTwoObjectsBlueRightCodeEnv)
 register_config(
     "x2_pick_place_two_objects_blue_right_code_env",
+    CodeExecEnvConfig(
+        low_level="x2_b1k_low_level",
+        apis=["X2PickPlaceApi"],
+    ),
+)
+register_exec_env(
+    "x2_pick_place_two_objects_blue_right_rgbd_visual_code_env",
+    X2PickPlaceTwoObjectsBlueRightRgbdVisualCodeEnv,
+)
+register_config(
+    "x2_pick_place_two_objects_blue_right_rgbd_visual_code_env",
     CodeExecEnvConfig(
         low_level="x2_b1k_low_level",
         apis=["X2PickPlaceApi"],

@@ -48,11 +48,28 @@ def _trial_parent_run_name(trial_dir: Path) -> str:
     return trial_dir.parent.name
 
 
+def _artifact_match_keys(run_name: str) -> set[str]:
+    keys = {run_name}
+    normalized = run_name
+    for prefix in ("x2_pick_place_", "x2_"):
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix) :]
+            keys.add(normalized)
+    if "x2_pick_place_" in run_name:
+        keys.add(run_name.replace("x2_pick_place_", ""))
+    return {key for key in keys if key}
+
+
 def _find_visual_artifacts(repo_root: Path, run_name: str) -> list[Path]:
     visual_root = repo_root / "outputs" / "x2_visual_artifacts"
     if not visual_root.exists():
         return []
-    return sorted(path.parent for path in visual_root.rglob("grasp_summary.json") if run_name in str(path))
+    keys = _artifact_match_keys(run_name)
+    return sorted(
+        path.parent
+        for path in visual_root.rglob("grasp_summary.json")
+        if any(key in str(path) for key in keys)
+    )
 
 
 def _first_code_lines(code_path: Path, max_lines: int = 12) -> str:
@@ -113,10 +130,16 @@ def _fmt(value: Any) -> str:
 
 
 def _print_markdown(rows: list[dict[str, Any]]) -> None:
-    print("| trial | ok | target | reward | task | tcp_err_m | ori_err_rad | in_hand | place_err_m | videos | visual |")
-    print("|---|---:|---|---:|---:|---:|---:|---|---:|---:|---:|")
+    print(
+        "| trial | ok | target | reward | task | obstacle | place_offset | reobserve | tcp_err_m | "
+        "ori_err_rad | close_offset_m | in_hand | place_err_m | descent | videos | visual |"
+    )
+    print("|---|---:|---|---:|---:|---|---|---|---:|---:|---:|---|---:|---:|---:|---:|")
     for row in rows:
         result = row.get("result") or {}
+        reobserve = _fmt(result.get("reobserve_adopted"))
+        if result.get("reobserve_reason"):
+            reobserve = f"{reobserve}/{result.get('reobserve_reason')}"
         print(
             "| "
             + " | ".join(
@@ -126,10 +149,15 @@ def _print_markdown(rows: list[dict[str, Any]]) -> None:
                     _fmt(result.get("target")),
                     _fmt(row.get("reward")),
                     _fmt(row.get("task_completed")),
+                    _fmt(result.get("obstacle_source")),
+                    _fmt(result.get("place_offset_source")),
+                    reobserve,
                     _fmt(result.get("before_close_tcp_error_m")),
                     _fmt(result.get("before_close_ori_error_rad")),
+                    _fmt(result.get("final_close_axis_offset_m")),
                     _fmt(result.get("object_in_hand_after_close")),
                     _fmt(result.get("place_error_m")),
+                    _fmt(result.get("place_descent_waypoints")),
                     str(len(row.get("videos") or [])),
                     str(len(row.get("visual_artifact_dirs") or [])),
                 ]

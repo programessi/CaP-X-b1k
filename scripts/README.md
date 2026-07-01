@@ -67,6 +67,18 @@ Two-object blue-cube-to-right oracle smoke:
 scripts/run_x2_two_object_blue_right_oracle_smoke.sh
 ```
 
+Two-object experimental RGB-D visual obstacle oracle smoke:
+
+```bash
+scripts/run_x2_two_object_blue_right_rgbd_visual_oracle_smoke.sh
+```
+
+This route uses RGB-D object/table obstacle boxes, visual grasp-pose place
+offset, precontact one-shot reobserve with quality-gated fallback, and slow
+vertical place descent. Summaries should show `reobserve_adopted`,
+`reobserve_reason`, `final_close_axis_offset_m`, and
+`place_descent_waypoints`.
+
 Summarize saved X2 runs:
 
 ```bash

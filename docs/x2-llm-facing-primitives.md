@@ -51,8 +51,13 @@ pick_and_place_visual_object(
     workspace_bounds=None,
     candidate_indices=None,
     place_position_threshold=0.10,
+    obstacle_source=None,
     use_sim_known_obstacles=True,
-    sim_place_correction_steps=2,
+    place_offset_source="after_close_sim_known",
+    sim_place_correction_steps=None,
+    grasp_tcp_axis_offsets_m=None,
+    reobserve_at_precontact=False,
+    place_descent_waypoints=1,
 )
 ```
 
@@ -67,14 +72,56 @@ settle/open gripper
 -> optional ranked candidate retry
 -> optional sim-known table/object obstacle boxes
 -> PyRoKi precontact motion
+-> optional one-shot precontact RGB-D reobserve with quality-gated fallback
 -> TCP insertion
--> close gripper
+-> close gripper, optionally trying close-time TCP axis offsets
 -> abort place leg if the gripper is empty after close
 -> lift and transfer through explicit high TCP waypoints
 -> optional sim-known object-center correction above the place target
--> mostly vertical descent to the release pose
+-> mostly vertical release descent, optionally split into slow waypoints
 -> release
 ```
+
+By default this preserves the accepted simulation route:
+
+```text
+obstacle_source=None -> "sim_known" when use_sim_known_obstacles=True
+place_offset_source="after_close_sim_known"
+sim_place_correction_steps=None -> 2 for the sim-known route
+```
+
+The experimental perception-driven route is explicit:
+
+```python
+RESULT = pick_and_place_visual_object(
+    "x2_pick_place_blue_cube",
+    [0.37, 0.055, 0.921],
+    prompts=["blue cube", "blue block", "blue box"],
+    table_name="x2_pick_place_table",
+    obstacle_source="rgbd_visual",
+    place_offset_source="visual_grasp_pose",
+    sim_place_correction_steps=0,
+    candidate_indices=(1, 2),
+    grasp_tcp_axis_offsets_m=(0.0, 0.004, 0.008, 0.012),
+    reobserve_at_precontact=True,
+    reobserve_distance_m=0.08,
+    reobserve_max_object_shift_m=0.025,
+    reobserve_max_grasp_shift_m=0.035,
+    place_descent_waypoints=4,
+    place_descent_max_joint_step=0.006,
+    place_descent_hold_steps_per_waypoint=8,
+    place_pre_release_settle_steps=16,
+)
+```
+
+In that route, object/table planning boxes are estimated from the RGB-D visual
+frame, and the place TCP offset is computed from the grasp-time visual object
+pose estimate plus the actual TCP pose after close. The close-time axis offset
+sweep, precontact reobserve, and slow descent are explicit and experimental;
+the default primitive call keeps the accepted single-close, single-descent
+simulation behavior. The current RGB-D oracle smoke intentionally limits
+candidate retries to `(1, 2)` so the precontact reobserve route stays within
+the per-trial runtime budget.
 
 Returns a dict with `ok`, `plan`, `obstacles_world`, and `execution`.
 
@@ -166,8 +213,13 @@ RESULT["attempts"]                 ranked GraspNet candidate attempts
 execution["before_close_error"]["tcp_error_m"]
 execution["before_close_error"]["ori_error_rad"]
 execution["before_close_reached"]
+execution["preclose_attempts"]
+execution["final_close_attempt"]
+execution["precontact_reobserve"]
+execution["active_plan_summary"]
 execution["object_in_hand_after_close"]
 execution["place"]["place_error_m"]
+execution["place"]["place_descent_waypoints"]
 ```
 
 Forbidden in ordinary generated X2 task code:
@@ -212,9 +264,10 @@ ranked GraspNet candidate.
 
 For the held-object transfer leg, the current task primitive does not give
 PyRoKi one unconstrained goal from grasp to place prepose. It inserts explicit
-high TCP waypoints and tracks them with joint-IK moves, then descends mostly
-vertically for release. This keeps the path close to the tabletop work area and
-avoids the previously observed large body-side arc.
+high TCP waypoints and tracks them with joint-IK moves. The experimental route
+then descends through multiple vertical TCP waypoints and can settle before
+release. This keeps the path close to the tabletop work area and avoids the
+previously observed large body-side arc and tabletop dragging.
 
 ## Sim-Only Helper
 
@@ -231,6 +284,35 @@ not a 2real perception primitive.
 object center before release. The current pick-place baseline applies this
 correction at the elevated pre-release pose above the target, then descends
 mostly vertically to avoid dragging the cube across the tabletop.
+
+## Experimental RGB-D Obstacle Helper
+
+```python
+get_rgbd_visual_tabletop_obstacles(visual_grasp_plan, ...)
+```
+
+Builds PyRoKi box obstacles from the visual grasp plan's SAM2 mask, depth
+image, camera intrinsics/extrinsics, and visual object pose estimate. The
+object box comes from the target mask point cloud. The table box comes from
+RGB-D points outside the target mask and below the object. The returned boxes
+are in the world frame and use the same schema as `get_sim_known_tabletop_obstacles()`.
+
+This is the current route toward real-work-friendly obstacle estimation. It
+does not read scene object AABBs or `object_registry`, but it is still a simple
+tabletop estimator rather than a full scene reconstruction planner.
+
+## Experimental Precontact Reobserve
+
+`pick_and_place_visual_object(..., reobserve_at_precontact=True, ...)` forwards
+the current visual prompts, camera selection, workspace bounds, orientation
+prior, and candidate index to `execute_tcp_grasp_plan()`. The executor stops at
+precontact, settles, runs `plan_visual_grasp_tcp_pose()` once more, and adopts
+the new plan only when the mask/depth/shift/IK gates pass.
+
+This is a one-shot correction, not continuous visual servo control. If the
+hand occludes the object or the new estimate jumps too far, execution falls
+back to the initial visual plan and records the reason under
+`execution["precontact_reobserve"]`.
 
 ## Debug Motion Helpers
 

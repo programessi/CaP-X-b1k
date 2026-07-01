@@ -112,6 +112,7 @@ class X2ControlApi(ApiBase):
             "plan_x2_grasp_execution": self.plan_x2_grasp_execution,
             "plan_x2_guarded_grasp_approach": self.plan_x2_guarded_grasp_approach,
             "get_sim_known_tabletop_obstacles": self.get_sim_known_tabletop_obstacles,
+            "get_rgbd_visual_tabletop_obstacles": self.get_rgbd_visual_tabletop_obstacles,
             "grasp_object": self.grasp_object,
             "check_object_in_hand": self.check_object_in_hand,
             "move_to_joint_positions": self.move_to_joint_positions,
@@ -149,7 +150,8 @@ class X2ControlApi(ApiBase):
         if isinstance(value, np.generic):
             return value.item()
         if isinstance(value, dict):
-            return {str(key): X2ControlApi._jsonable(val) for key, val in value.items() if key != "mask"}
+            skipped = {"mask", "depth", "points_world", "depths"}
+            return {str(key): X2ControlApi._jsonable(val) for key, val in value.items() if key not in skipped}
         if isinstance(value, (list, tuple)):
             return [X2ControlApi._jsonable(item) for item in value]
         return value
@@ -256,6 +258,112 @@ class X2ControlApi(ApiBase):
             print(f"[X2VisualArtifacts] failed to save artifacts: {exc!r}")
             return None
 
+    def _maybe_save_pick_place_result_artifact(self, result: dict[str, Any]) -> None:
+        """Save a compact pick-place result next to the visual artifacts."""
+        try:
+            plan = result.get("plan")
+            artifact_dir = None
+            if isinstance(plan, dict):
+                artifact_dir = plan.get("visual_artifact_dir")
+            obstacle_plan = result.get("obstacle_plan")
+            if artifact_dir is None and isinstance(obstacle_plan, dict):
+                artifact_dir = obstacle_plan.get("visual_artifact_dir")
+            if not artifact_dir:
+                return
+
+            selection = plan.get("selection") if isinstance(plan, dict) else None
+            ranked_candidates = []
+            if isinstance(selection, dict):
+                for item in list(selection.get("ranked_candidates", []) or [])[:10]:
+                    if not isinstance(item, dict):
+                        continue
+                    ranked_candidates.append(
+                        {
+                            "raw_index": item.get("raw_index"),
+                            "name": item.get("name"),
+                            "score": item.get("score"),
+                            "adapted_position": item.get("adapted_position"),
+                            "adapted_quat_xyzw": item.get("adapted_quat_xyzw"),
+                            "position_error_m": item.get("position_error_m"),
+                            "quat_error_to_reference_rad": item.get("quat_error_to_reference_rad"),
+                            "axis_error_to_reference_rad": item.get("axis_error_to_reference_rad"),
+                            "proxy_collision_count": item.get("proxy_collision_count"),
+                            "selection_score": item.get("selection_score"),
+                        }
+                    )
+
+            execution = result.get("execution")
+            execution_summary = None
+            if isinstance(execution, dict):
+                execution_summary = {
+                    key: execution.get(key)
+                    for key in (
+                        "ok",
+                        "precontact_ok",
+                        "fine_align_ok",
+                        "close_attempted",
+                        "before_close_reached",
+                        "before_close_error",
+                        "precontact_reobserve",
+                        "active_plan_summary",
+                        "preclose_axis_offsets_m",
+                        "preclose_attempts",
+                        "final_close_attempt",
+                        "grasp_ok",
+                        "place_motion_steps_ok",
+                        "object_in_hand_after_close",
+                        "object_after_close",
+                        "place",
+                        "place_offset_source",
+                        "read_after_close_sim_object_pose",
+                        "last_motion_debug",
+                    )
+                }
+
+            plan_summary = None
+            if isinstance(plan, dict):
+                plan_summary = {
+                    "ok": plan.get("ok"),
+                    "source": plan.get("source"),
+                    "strategy": plan.get("strategy"),
+                    "visual_artifact_dir": plan.get("visual_artifact_dir"),
+                    "pose_estimate": plan.get("pose_estimate"),
+                    "grasp_tcp_pose": plan.get("grasp_tcp_pose"),
+                    "precontact_tcp_pose": plan.get("precontact_tcp_pose"),
+                    "tcp_axis_world": plan.get("tcp_axis_world"),
+                    "selection": None
+                    if not isinstance(selection, dict)
+                    else {
+                        "ok": selection.get("ok"),
+                        "selected_rank": selection.get("selected_rank"),
+                        "selected_raw_index": selection.get("selected_raw_index"),
+                        "selected_score": selection.get("selected_score"),
+                        "tcp_axis_world": selection.get("tcp_axis_world"),
+                        "ranked_candidates": ranked_candidates,
+                    },
+                }
+
+            summary = {
+                "ok": result.get("ok"),
+                "source": result.get("source"),
+                "object_name": result.get("object_name"),
+                "place_position_world": result.get("place_position_world"),
+                "place_position_threshold": result.get("place_position_threshold"),
+                "obstacle_source": result.get("obstacle_source"),
+                "obstacle_plan": obstacle_plan,
+                "obstacles_world": result.get("obstacles_world"),
+                "plan": plan_summary,
+                "execution": execution_summary,
+                "attempts": result.get("attempts"),
+                "sim_only": result.get("sim_only"),
+                "real_work_friendly": result.get("real_work_friendly"),
+                "contract": result.get("contract"),
+            }
+            out_path = Path(artifact_dir).expanduser() / "pick_place_result_summary.json"
+            out_path.write_text(json.dumps(self._jsonable(summary), indent=2, ensure_ascii=True))
+        except Exception as exc:
+            print(f"[X2VisualArtifacts] failed to save pick-place result artifact: {exc!r}")
+
     @staticmethod
     def _best_by_score(items: list[dict[str, Any]]) -> dict[str, Any] | None:
         if not items:
@@ -293,6 +401,88 @@ class X2ControlApi(ApiBase):
         median = float(np.median(values))
         spread = float(np.percentile(values, 90.0) - np.percentile(values, 10.0)) if values.size >= 8 else 0.08
         return median, max(0.035, min(0.18, 0.5 * spread + 0.03))
+
+    @staticmethod
+    def _visual_plan_mask_depth_count(plan: dict[str, Any]) -> int:
+        visual = plan.get("visual") or {}
+        try:
+            mask = np.asarray(visual["mask"], dtype=bool)
+            depth = np.squeeze(np.asarray(visual["depth"], dtype=np.float64))
+        except Exception:
+            return 0
+        if mask.shape != depth.shape:
+            return 0
+        valid = mask & np.isfinite(depth) & (depth > 0.0)
+        expected_depth = visual.get("expected_depth")
+        depth_window = visual.get("depth_window")
+        if expected_depth is not None and depth_window is not None:
+            valid = valid & (np.abs(depth - float(expected_depth)) <= float(depth_window))
+        return int(valid.sum())
+
+    def _check_tcp_pose_ik_reachability(
+        self,
+        tcp_pose: tuple[np.ndarray, np.ndarray],
+        *,
+        arm: int = 1,
+        max_fk_pos_error_m: float = 0.035,
+        max_fk_ori_error_rad: float = 0.45,
+    ) -> dict[str, Any]:
+        """Check whether a TCP pose has a finite one-shot IK solution.
+
+        This is a static gate. It does not command the robot.
+        """
+        try:
+            eef_pose = self.tcp_pose_to_eef_pose(tcp_pose, arm=arm)
+            q_target, debug = self._env._solve_pyroki_eef_joint_target(eef_pose, arm=arm)
+            q_target = np.asarray(q_target, dtype=np.float64)
+            fk_pos_error = float((debug or {}).get("solve_fk_pos_error_m", np.inf))
+            fk_ori_error = float((debug or {}).get("solve_fk_ori_error_rad", np.inf))
+            ok = bool(
+                q_target.size > 0
+                and np.all(np.isfinite(q_target))
+                and fk_pos_error <= float(max_fk_pos_error_m)
+                and fk_ori_error <= float(max_fk_ori_error_rad)
+            )
+            return {
+                "ok": ok,
+                "fk_pos_error_m": fk_pos_error,
+                "fk_ori_error_rad": fk_ori_error,
+                "max_fk_pos_error_m": float(max_fk_pos_error_m),
+                "max_fk_ori_error_rad": float(max_fk_ori_error_rad),
+                "debug": debug,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": repr(exc),
+                "max_fk_pos_error_m": float(max_fk_pos_error_m),
+                "max_fk_ori_error_rad": float(max_fk_ori_error_rad),
+            }
+
+    @staticmethod
+    def _compact_visual_grasp_plan_summary(plan: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(plan, dict):
+            return None
+        selection = plan.get("selection")
+        return {
+            "ok": plan.get("ok"),
+            "source": plan.get("source"),
+            "strategy": plan.get("strategy"),
+            "object_name": plan.get("object_name"),
+            "visual_artifact_dir": plan.get("visual_artifact_dir"),
+            "pose_estimate": plan.get("pose_estimate"),
+            "grasp_tcp_pose": plan.get("grasp_tcp_pose"),
+            "precontact_tcp_pose": plan.get("precontact_tcp_pose"),
+            "tcp_axis_world": plan.get("tcp_axis_world"),
+            "selection": None
+            if not isinstance(selection, dict)
+            else {
+                "ok": selection.get("ok"),
+                "selected_rank": selection.get("selected_rank"),
+                "selected_raw_index": selection.get("selected_raw_index"),
+                "selected_score": selection.get("selected_score"),
+            },
+        }
 
     @staticmethod
     def _pose_right_transform(
@@ -2096,6 +2286,7 @@ class X2ControlApi(ApiBase):
                 "detection": detection,
                 "mask_result": mask_result,
                 "mask": mask,
+                "depth": depth,
                 "mask_pixels": int(mask.sum()),
                 "expected_depth": expected_depth,
                 "depth_window": depth_window,
@@ -2236,6 +2427,345 @@ class X2ControlApi(ApiBase):
         return obstacles
 
     @staticmethod
+    def _filter_points_by_workspace(
+        points: np.ndarray,
+        workspace_bounds: dict[str, tuple[float, float]] | None,
+    ) -> np.ndarray:
+        points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+        if workspace_bounds is None or len(points) == 0:
+            return points
+        keep = np.ones(len(points), dtype=bool)
+        for idx, axis in enumerate(("x", "y", "z")):
+            bounds = workspace_bounds.get(axis)
+            if bounds is None:
+                continue
+            keep &= points[:, idx] >= float(bounds[0])
+            keep &= points[:, idx] <= float(bounds[1])
+        return points[keep]
+
+    @staticmethod
+    def _aabb_obstacle_from_points(
+        points: np.ndarray,
+        *,
+        name: str,
+        source: str,
+        margin_xyz: np.ndarray,
+        min_extent_xyz: np.ndarray,
+        center_override: np.ndarray | None = None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+        detail: dict[str, Any] = {
+            "source": source,
+            "raw_point_count": int(len(points)),
+            "ok": False,
+        }
+        finite = np.all(np.isfinite(points), axis=1) if len(points) else np.array([], dtype=bool)
+        points = points[finite]
+        detail["finite_point_count"] = int(len(points))
+        if len(points) < 4:
+            detail["error"] = "not_enough_points_for_aabb"
+            return None, detail
+
+        lo = np.percentile(points, 2.0, axis=0)
+        hi = np.percentile(points, 98.0, axis=0)
+        visible_center = (lo + hi) / 2.0
+        visible_extent = np.maximum(hi - lo, 0.0)
+        margin = np.asarray(margin_xyz, dtype=np.float64).reshape(3)
+        min_extent = np.asarray(min_extent_xyz, dtype=np.float64).reshape(3)
+        extent = np.maximum(visible_extent, min_extent) + 2.0 * margin
+        center = (
+            visible_center
+            if center_override is None
+            else np.asarray(center_override, dtype=np.float64).reshape(3)
+        )
+        obstacle = {
+            "type": "box",
+            "name": name,
+            "position": center.tolist(),
+            "extent": extent.tolist(),
+            "quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+            "source": source,
+        }
+        detail.update(
+            {
+                "ok": True,
+                "visible_center_world": visible_center,
+                "visible_extent": visible_extent,
+                "box_position": center,
+                "box_extent": extent,
+            }
+        )
+        return obstacle, detail
+
+    @staticmethod
+    def _estimate_table_obstacle_from_points(
+        points: np.ndarray,
+        *,
+        object_position: np.ndarray,
+        name: str,
+        table_margin_xy: float,
+        table_margin_z: float,
+        table_thickness: float,
+        table_plane_tolerance: float,
+        table_min_extent_xy: tuple[float, float],
+    ) -> tuple[dict[str, Any] | None, dict[str, Any], np.ndarray]:
+        points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+        object_pos = np.asarray(object_position, dtype=np.float64).reshape(3)
+        detail: dict[str, Any] = {
+            "source": "rgbd_table_plane_aabb",
+            "input_point_count": int(len(points)),
+            "ok": False,
+        }
+        if len(points) < 16:
+            detail["error"] = "not_enough_points_before_table_filter"
+            return None, detail, np.empty((0, 3), dtype=np.float64)
+
+        # Keep the high support surface below the target object. This is a
+        # tabletop-specific estimator, not a general room reconstruction.
+        z_min = float(object_pos[2]) - 0.20
+        z_max = float(object_pos[2]) - 0.004
+        support_candidates = points[
+            np.isfinite(points).all(axis=1)
+            & (points[:, 2] >= z_min)
+            & (points[:, 2] <= z_max)
+        ]
+        detail["support_candidate_count"] = int(len(support_candidates))
+        detail["z_filter"] = {"min": z_min, "max": z_max}
+        if len(support_candidates) < 16:
+            detail["error"] = "not_enough_points_after_table_z_filter"
+            return None, detail, np.empty((0, 3), dtype=np.float64)
+
+        table_z = float(np.percentile(support_candidates[:, 2], 92.0))
+        plane_points = support_candidates[
+            np.abs(support_candidates[:, 2] - table_z) <= float(table_plane_tolerance)
+        ]
+        if len(plane_points) < 16:
+            z_floor = float(np.percentile(support_candidates[:, 2], 80.0))
+            plane_points = support_candidates[support_candidates[:, 2] >= z_floor]
+            detail["fallback_used"] = "top_20_percent_support_points"
+        detail["plane_point_count"] = int(len(plane_points))
+        detail["table_z_world"] = table_z
+        if len(plane_points) < 8:
+            detail["error"] = "not_enough_table_plane_points"
+            return None, detail, plane_points
+
+        xy_lo = np.percentile(plane_points[:, :2], 2.0, axis=0)
+        xy_hi = np.percentile(plane_points[:, :2], 98.0, axis=0)
+        xy_center = (xy_lo + xy_hi) / 2.0
+        xy_extent = np.maximum(
+            xy_hi - xy_lo,
+            np.asarray(table_min_extent_xy, dtype=np.float64).reshape(2),
+        )
+        extent = np.array(
+            [
+                xy_extent[0] + 2.0 * float(table_margin_xy),
+                xy_extent[1] + 2.0 * float(table_margin_xy),
+                float(table_thickness) + 2.0 * float(table_margin_z),
+            ],
+            dtype=np.float64,
+        )
+        center = np.array(
+            [
+                xy_center[0],
+                xy_center[1],
+                table_z - 0.5 * float(table_thickness),
+            ],
+            dtype=np.float64,
+        )
+        obstacle = {
+            "type": "box",
+            "name": name,
+            "position": center.tolist(),
+            "extent": extent.tolist(),
+            "quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+            "source": "rgbd_table_plane_aabb",
+        }
+        detail.update(
+            {
+                "ok": True,
+                "box_position": center,
+                "box_extent": extent,
+                "xy_center": xy_center,
+                "xy_extent_visible": xy_hi - xy_lo,
+            }
+        )
+        return obstacle, detail, plane_points
+
+    def _save_rgbd_visual_obstacle_artifacts(
+        self,
+        *,
+        artifact_dir: str | None,
+        obstacle_result: dict[str, Any],
+        object_points: np.ndarray,
+        table_points: np.ndarray,
+    ) -> None:
+        if not artifact_dir:
+            return
+        try:
+            run_dir = Path(artifact_dir).expanduser()
+            run_dir.mkdir(parents=True, exist_ok=True)
+            summary = {
+                "ok": obstacle_result.get("ok"),
+                "source": obstacle_result.get("source"),
+                "obstacles_world": self._jsonable(obstacle_result.get("obstacles_world")),
+                "object_obstacle": self._jsonable(obstacle_result.get("object_obstacle")),
+                "table_obstacle": self._jsonable(obstacle_result.get("table_obstacle")),
+                "contract": obstacle_result.get("contract"),
+                "sim_truth": obstacle_result.get("sim_truth"),
+            }
+            (run_dir / "visual_obstacles.json").write_text(json.dumps(summary, indent=2, ensure_ascii=True))
+            np.save(run_dir / "object_obstacle_points_world.npy", np.asarray(object_points, dtype=np.float32))
+            np.save(run_dir / "table_obstacle_points_world.npy", np.asarray(table_points, dtype=np.float32))
+        except Exception as exc:
+            print(f"[X2VisualArtifacts] failed to save RGB-D obstacle artifacts: {exc!r}")
+
+    def get_rgbd_visual_tabletop_obstacles(
+        self,
+        visual_grasp_plan: dict[str, Any],
+        *,
+        object_name: str | None = None,
+        table_name: str = "visual_table",
+        workspace_bounds: dict[str, tuple[float, float]] | None = None,
+        object_margin: float = 0.012,
+        object_min_extent: tuple[float, float, float] = (0.035, 0.035, 0.035),
+        table_margin_xy: float = 0.02,
+        table_margin_z: float = 0.006,
+        table_thickness: float = 0.024,
+        table_plane_tolerance: float = 0.015,
+        table_min_extent_xy: tuple[float, float] = (0.16, 0.16),
+        include_object: bool = True,
+        include_table: bool = True,
+    ) -> dict[str, Any]:
+        """Estimate tabletop PyRoKi box obstacles from RGB-D visual geometry.
+
+        This is the real-work-friendly alternative to
+        ``get_sim_known_tabletop_obstacles``. It uses the SAM2 mask, depth
+        image, camera intrinsics/extrinsics, and visual object pose already
+        stored in ``plan_visual_grasp_tcp_pose``. It must not read
+        ``object_registry``, object AABBs, or table AABBs.
+
+        Returns:
+            Dict containing ``ok`` and ``obstacles_world``. The obstacle
+            dictionaries use the same world-frame box schema as the sim-known
+            path and are safe to pass into PyRoKi planning.
+        """
+        plan = visual_grasp_plan or {}
+        visual = plan.get("visual") or {}
+        camera = plan.get("camera") or {}
+        pose_estimate = plan.get("pose_estimate") or {}
+        result: dict[str, Any] = {
+            "ok": False,
+            "source": "rgbd_visual_tabletop_obstacles",
+            "obstacles_world": [],
+            "object_obstacle": None,
+            "table_obstacle": None,
+            "errors": [],
+            "sim_truth": False,
+            "contract": "obstacle boxes are estimated from RGB-D mask/depth in world frame; no scene object/table AABB is read",
+        }
+
+        try:
+            mask = np.asarray(visual["mask"], dtype=bool)
+            depth = np.squeeze(np.asarray(visual["depth"], dtype=np.float64))
+            intrinsic_matrix = np.asarray(camera["intrinsic_matrix"], dtype=np.float64).reshape(3, 3)
+            camera_pos = np.asarray(camera["position_world"], dtype=np.float64).reshape(3)
+            camera_quat = np.asarray(camera["quat_xyzw_world"], dtype=np.float64).reshape(4)
+            object_pos = np.asarray(pose_estimate["position_world"], dtype=np.float64).reshape(3)
+        except Exception as exc:
+            result["errors"].append(f"missing_visual_plan_inputs: {exc!r}")
+            return result
+
+        if depth.ndim != 2 or mask.shape != depth.shape:
+            result["errors"].append(f"mask_depth_shape_mismatch: mask={mask.shape}, depth={depth.shape}")
+            return result
+
+        T_world_cam = x2_vision.pose_to_matrix(camera_pos, camera_quat)
+        expected_depth = visual.get("expected_depth")
+        depth_window = visual.get("depth_window")
+        object_points, object_depths = x2_vision.backproject_mask_to_world(
+            mask,
+            depth,
+            intrinsic_matrix,
+            T_world_cam,
+        )
+        if expected_depth is not None and depth_window is not None and len(object_points):
+            keep = np.abs(object_depths - float(expected_depth)) <= float(depth_window)
+            filtered_object_points = object_points[keep]
+            if len(filtered_object_points) >= 4:
+                object_points = filtered_object_points
+        object_points = self._filter_points_by_workspace(object_points, workspace_bounds)
+
+        object_obstacle = None
+        object_detail: dict[str, Any] | None = None
+        if include_object:
+            pose_extent = pose_estimate.get("bbox_extent")
+            min_extent = np.asarray(object_min_extent, dtype=np.float64).reshape(3)
+            if pose_extent is not None:
+                min_extent = np.maximum(min_extent, np.asarray(pose_extent, dtype=np.float64).reshape(3))
+            object_obstacle, object_detail = self._aabb_obstacle_from_points(
+                object_points,
+                name=str(object_name or pose_estimate.get("object_name") or plan.get("object_name") or "visual_object"),
+                source="rgbd_object_mask_aabb",
+                margin_xyz=np.full(3, float(object_margin), dtype=np.float64),
+                min_extent_xyz=min_extent,
+                center_override=object_pos,
+            )
+            result["object_obstacle"] = object_detail
+            if object_obstacle is not None:
+                result["obstacles_world"].append(object_obstacle)
+            else:
+                result["errors"].append("object_obstacle_failed")
+
+        valid_depth_mask = np.isfinite(depth) & (depth > 0.0)
+        table_mask = valid_depth_mask & ~mask
+        table_points_all, _table_depths = x2_vision.backproject_mask_to_world(
+            table_mask,
+            depth,
+            intrinsic_matrix,
+            T_world_cam,
+        )
+        table_points_all = self._filter_points_by_workspace(table_points_all, workspace_bounds)
+
+        table_obstacle = None
+        table_detail: dict[str, Any] | None = None
+        table_points = np.empty((0, 3), dtype=np.float64)
+        if include_table:
+            table_obstacle, table_detail, table_points = self._estimate_table_obstacle_from_points(
+                table_points_all,
+                object_position=object_pos,
+                name=str(table_name),
+                table_margin_xy=float(table_margin_xy),
+                table_margin_z=float(table_margin_z),
+                table_thickness=float(table_thickness),
+                table_plane_tolerance=float(table_plane_tolerance),
+                table_min_extent_xy=table_min_extent_xy,
+            )
+            result["table_obstacle"] = table_detail
+            if table_obstacle is not None:
+                result["obstacles_world"].append(table_obstacle)
+            else:
+                result["errors"].append("table_obstacle_failed")
+
+        result["ok"] = bool(
+            (not include_object or object_obstacle is not None)
+            and (not include_table or table_obstacle is not None)
+        )
+        result["point_counts"] = {
+            "object_points": int(len(object_points)),
+            "table_candidate_points": int(len(table_points_all)),
+            "table_plane_points": int(len(table_points)),
+        }
+        artifact_dir = plan.get("visual_artifact_dir")
+        result["visual_artifact_dir"] = artifact_dir
+        self._save_rgbd_visual_obstacle_artifacts(
+            artifact_dir=artifact_dir,
+            obstacle_result=result,
+            object_points=object_points,
+            table_points=table_points,
+        )
+        return result
+
+    @staticmethod
     def _without_obstacle_named(obstacles_world: list[dict[str, Any]] | None, name: str | None) -> list[dict[str, Any]] | None:
         if obstacles_world is None:
             return None
@@ -2278,9 +2808,31 @@ class X2ControlApi(ApiBase):
         place_position_threshold: float = 0.08,
         require_object_in_hand_for_place: bool = True,
         skip_place_if_no_object_in_hand: bool = True,
+        place_offset_source: str = "after_close_sim_known",
+        read_after_close_sim_object_pose: bool = True,
         place_object_correction_steps: int = 0,
         place_object_correction_threshold: float = 0.025,
         place_object_correction_max_step: float = 0.05,
+        grasp_tcp_axis_offsets_m: list[float] | tuple[float, ...] | None = None,
+        reobserve_at_precontact: bool = False,
+        reobserve_prompts: list[str] | tuple[str, ...] | None = None,
+        reobserve_camera_name: str | None = None,
+        reobserve_orientation_quat_xyzw: np.ndarray | list[float] | tuple[float, float, float, float] | None = None,
+        reobserve_workspace_bounds: dict[str, tuple[float, float]] | None = None,
+        reobserve_distance_m: float = 0.08,
+        reobserve_insert_waypoints: int | None = None,
+        reobserve_candidate_index: int | None = None,
+        reobserve_min_mask_pixels: int = 1000,
+        reobserve_min_depth_points: int = 64,
+        reobserve_max_object_shift_m: float = 0.04,
+        reobserve_max_grasp_shift_m: float = 0.05,
+        reobserve_max_precontact_shift_m: float = 0.07,
+        reobserve_max_ik_pos_error_m: float = 0.035,
+        reobserve_max_ik_ori_error_rad: float = 0.45,
+        place_descent_waypoints: int = 1,
+        place_descent_max_joint_step: float | None = None,
+        place_descent_hold_steps_per_waypoint: int | None = None,
+        place_pre_release_settle_steps: int = 0,
     ) -> dict[str, Any]:
         """Execute a visual X2 TCP grasp plan, optionally as a full pick-place.
 
@@ -2306,11 +2858,31 @@ class X2ControlApi(ApiBase):
                 merely pushed near the target.
             skip_place_if_no_object_in_hand: If true, abort the place leg when
                 the gripper is empty after close, then retreat to precontact.
+            place_offset_source: ``"after_close_sim_known"`` preserves the
+                current simulation baseline by using the sim-known object pose
+                after closing. ``"visual_grasp_pose"`` computes the TCP-to-
+                object offset from the grasp-time visual pose estimate and does
+                not require reading the object pose after close.
+            read_after_close_sim_object_pose: Whether to record the sim-known
+                object pose immediately after closing. Set false for the
+                experimental real-work-friendly place offset path.
             place_object_correction_steps: Optional sim-only pre-release
                 correction count. When greater than zero, the API reads the
                 sim-known object center before opening the gripper and nudges
                 the TCP by the clipped object-center error. This is not a
                 2real primitive.
+            grasp_tcp_axis_offsets_m: Optional close-time offsets along the
+                visual TCP approach axis. ``0.0`` preserves the planned
+                GraspNet-adapted TCP. Positive values over-insert a few
+                millimeters toward the object before closing; this is useful
+                when perception gives a reachable but shallow grasp pose.
+            reobserve_at_precontact: If true, stop at precontact, run one more
+                RGB-D visual grasp plan, and adopt it only if quality gates
+                pass. This is a half-closed-loop pick correction, not
+                continuous visual servoing.
+            place_descent_waypoints: Number of vertical release descent
+                waypoints. ``1`` preserves the old single descent move; larger
+                values make place slower and more vertical.
 
         Returns:
             Execution summary with before-close TCP error and, when requested,
@@ -2323,6 +2895,27 @@ class X2ControlApi(ApiBase):
         if obstacles_world is None:
             obstacles_world = plan.get("obstacles_world")
         object_name = plan.get("object_name") or (plan.get("pose_estimate") or {}).get("object_name")
+        place_offset_source = str(place_offset_source)
+        valid_place_offset_sources = {"after_close_sim_known", "visual_grasp_pose", "visual_plan_pose_estimate"}
+        if place_offset_source not in valid_place_offset_sources:
+            return {
+                "ok": False,
+                "source": "x2_tcp_grasp_executor",
+                "error": f"unsupported place_offset_source: {place_offset_source!r}",
+                "valid_place_offset_sources": sorted(valid_place_offset_sources),
+            }
+        if place_position is not None and place_tcp_pose is None and place_offset_source in {
+            "visual_grasp_pose",
+            "visual_plan_pose_estimate",
+        }:
+            pose_estimate = plan.get("pose_estimate") or {}
+            if pose_estimate.get("position_world") is None:
+                return {
+                    "ok": False,
+                    "source": "x2_tcp_grasp_executor",
+                    "error": "visual place offset requested but plan.pose_estimate.position_world is missing",
+                    "place_offset_source": place_offset_source,
+                }
         transfer_obstacles = (
             self._without_obstacle_named(obstacles_world, object_name)
             if transfer_obstacles_world is None
@@ -2340,8 +2933,147 @@ class X2ControlApi(ApiBase):
             settle_steps=int(settle_steps),
             hold_steps_per_waypoint=int(hold_steps_per_waypoint),
         )
+        active_plan = plan
+        precontact_reobserve: dict[str, Any] = {
+            "enabled": bool(reobserve_at_precontact),
+            "adopted": False,
+            "reason": "disabled",
+            "initial_plan": self._compact_visual_grasp_plan_summary(plan),
+        }
+        if bool(reobserve_at_precontact):
+            self.settle_robot(steps=max(8, int(settle_steps)))
+            selected_rank = (plan.get("selection") or {}).get("selected_rank")
+            effective_reobserve_candidate = (
+                int(selected_rank)
+                if reobserve_candidate_index is None and selected_rank is not None
+                else int(reobserve_candidate_index or 0)
+            )
+            effective_reobserve_insert_waypoints = (
+                len(plan.get("insertion_waypoints") or [])
+                if reobserve_insert_waypoints is None
+                else int(reobserve_insert_waypoints)
+            )
+            precontact_reobserve.update(
+                {
+                    "reason": "pending",
+                    "candidate_index": int(effective_reobserve_candidate),
+                    "quality_gates": {
+                        "min_mask_pixels": int(reobserve_min_mask_pixels),
+                        "min_depth_points": int(reobserve_min_depth_points),
+                        "max_object_shift_m": float(reobserve_max_object_shift_m),
+                        "max_grasp_shift_m": float(reobserve_max_grasp_shift_m),
+                        "max_precontact_shift_m": float(reobserve_max_precontact_shift_m),
+                        "max_ik_pos_error_m": float(reobserve_max_ik_pos_error_m),
+                        "max_ik_ori_error_rad": float(reobserve_max_ik_ori_error_rad),
+                    },
+                }
+            )
+            try:
+                reobserve_plan = self.plan_visual_grasp_tcp_pose(
+                    str(object_name or plan.get("object_name") or "visual_object"),
+                    prompts=None if reobserve_prompts is None else list(reobserve_prompts),
+                    camera_name=reobserve_camera_name,
+                    arm=arm,
+                    external=False,
+                    orientation_quat_xyzw=(
+                        None
+                        if reobserve_orientation_quat_xyzw is None
+                        else np.asarray(reobserve_orientation_quat_xyzw, dtype=np.float64).reshape(4)
+                    ),
+                    object_pose_method="aabb_center",
+                    graspnet_forward_passes=4,
+                    graspnet_max_retries=30,
+                    graspnet_max_candidates=24,
+                    min_mask_pixels=12,
+                    workspace_bounds=reobserve_workspace_bounds,
+                    precontact_distance=float(reobserve_distance_m),
+                    insert_waypoints=max(1, int(effective_reobserve_insert_waypoints)),
+                    candidate_index=int(effective_reobserve_candidate),
+                    proxy_guard_object_size=0.04,
+                )
+                precontact_reobserve["reobserve_plan"] = self._compact_visual_grasp_plan_summary(reobserve_plan)
+                if not reobserve_plan.get("ok"):
+                    precontact_reobserve.update(
+                        {
+                            "adopted": False,
+                            "reason": "reobserve_plan_failed",
+                            "error": reobserve_plan.get("error"),
+                        }
+                    )
+                else:
+                    initial_object_pos = np.asarray(
+                        (plan.get("pose_estimate") or {}).get("position_world"),
+                        dtype=np.float64,
+                    ).reshape(3)
+                    new_object_pos = np.asarray(
+                        (reobserve_plan.get("pose_estimate") or {}).get("position_world"),
+                        dtype=np.float64,
+                    ).reshape(3)
+                    initial_grasp_pos = np.asarray(plan["grasp_tcp_pose"][0], dtype=np.float64).reshape(3)
+                    new_grasp_pos = np.asarray(reobserve_plan["grasp_tcp_pose"][0], dtype=np.float64).reshape(3)
+                    initial_precontact_pos = np.asarray(plan["precontact_tcp_pose"][0], dtype=np.float64).reshape(3)
+                    new_precontact_pos = np.asarray(reobserve_plan["precontact_tcp_pose"][0], dtype=np.float64).reshape(3)
+                    mask_pixels = int((reobserve_plan.get("visual") or {}).get("mask_pixels", 0) or 0)
+                    depth_points = self._visual_plan_mask_depth_count(reobserve_plan)
+                    object_shift_m = float(np.linalg.norm(new_object_pos - initial_object_pos))
+                    grasp_shift_m = float(np.linalg.norm(new_grasp_pos - initial_grasp_pos))
+                    precontact_shift_m = float(np.linalg.norm(new_precontact_pos - initial_precontact_pos))
+                    reachability = self._check_tcp_pose_ik_reachability(
+                        reobserve_plan["grasp_tcp_pose"],
+                        arm=arm,
+                        max_fk_pos_error_m=float(reobserve_max_ik_pos_error_m),
+                        max_fk_ori_error_rad=float(reobserve_max_ik_ori_error_rad),
+                    )
+                    metrics = {
+                        "mask_pixels": mask_pixels,
+                        "depth_points": depth_points,
+                        "object_shift_m": object_shift_m,
+                        "grasp_shift_m": grasp_shift_m,
+                        "precontact_shift_m": precontact_shift_m,
+                        "ik_reachability": reachability,
+                    }
+                    gate_failures = []
+                    if mask_pixels < int(reobserve_min_mask_pixels):
+                        gate_failures.append("mask_pixels_below_min")
+                    if depth_points < int(reobserve_min_depth_points):
+                        gate_failures.append("depth_points_below_min")
+                    if object_shift_m > float(reobserve_max_object_shift_m):
+                        gate_failures.append("object_shift_above_max")
+                    if grasp_shift_m > float(reobserve_max_grasp_shift_m):
+                        gate_failures.append("grasp_shift_above_max")
+                    if precontact_shift_m > float(reobserve_max_precontact_shift_m):
+                        gate_failures.append("precontact_shift_above_max")
+                    if reachability.get("ok") is not True:
+                        gate_failures.append("ik_reachability_failed")
+                    precontact_reobserve["metrics"] = metrics
+                    precontact_reobserve["gate_failures"] = gate_failures
+                    if gate_failures:
+                        precontact_reobserve.update(
+                            {
+                                "adopted": False,
+                                "reason": "quality_gate_failed",
+                            }
+                        )
+                    else:
+                        reobserve_plan["precontact_reobserve_source"] = "adopted_after_precontact_quality_gates"
+                        active_plan = reobserve_plan
+                        precontact_reobserve.update(
+                            {
+                                "adopted": True,
+                                "reason": "quality_gates_passed",
+                                "active_plan_source": "precontact_reobserve",
+                            }
+                        )
+            except Exception as exc:
+                precontact_reobserve.update(
+                    {
+                        "adopted": False,
+                        "reason": "exception",
+                        "error": repr(exc),
+                    }
+                )
         insertion_results = []
-        for waypoint in plan.get("insertion_waypoints", []) or []:
+        for waypoint in active_plan.get("insertion_waypoints", []) or []:
             ok = self.move_tcp_joint_ik(
                 waypoint["tcp_pose"],
                 arm=arm,
@@ -2365,9 +3097,22 @@ class X2ControlApi(ApiBase):
                     "ori_error_rad": self._quat_error_rad(reached_tcp_pose[1], target_quat),
                 }
             )
+        grasp_pos = np.asarray(active_plan["grasp_tcp_pose"][0], dtype=np.float64).reshape(3)
+        grasp_quat = np.asarray(active_plan["grasp_tcp_pose"][1], dtype=np.float64).reshape(4)
+        plan_axis = active_plan.get("tcp_axis_world")
+        if plan_axis is None:
+            tcp_offset = self.get_tcp_offset_eef(arm=arm)
+            plan_axis = x2_vision.quat_xyzw_to_matrix(grasp_quat) @ tcp_offset
+        tcp_axis_world = np.asarray(plan_axis, dtype=np.float64).reshape(3)
+        tcp_axis_world = tcp_axis_world / max(float(np.linalg.norm(tcp_axis_world)), 1e-12)
+        if grasp_tcp_axis_offsets_m is None:
+            preclose_axis_offsets = [0.0]
+        else:
+            preclose_axis_offsets = [float(offset) for offset in grasp_tcp_axis_offsets_m]
+            if not preclose_axis_offsets:
+                preclose_axis_offsets = [0.0]
+
         before_close_tcp_pose = self.get_current_tcp_pose(arm=arm)
-        grasp_pos = np.asarray(plan["grasp_tcp_pose"][0], dtype=np.float64).reshape(3)
-        grasp_quat = np.asarray(plan["grasp_tcp_pose"][1], dtype=np.float64).reshape(4)
         before_close_error = {
             "tcp_error_m": float(np.linalg.norm(before_close_tcp_pose[0] - grasp_pos)),
             "ori_error_rad": self._quat_error_rad(before_close_tcp_pose[1], grasp_quat),
@@ -2377,7 +3122,7 @@ class X2ControlApi(ApiBase):
         fine_align_target_tcp_threshold = float(final_tcp_threshold)
         if before_close_error["tcp_error_m"] > fine_align_target_tcp_threshold:
             fine_align_ok = self.move_tcp_joint_ik(
-                plan["grasp_tcp_pose"],
+                active_plan["grasp_tcp_pose"],
                 arm=arm,
                 pos_thresh=float(fine_align_target_tcp_threshold),
                 ori_thresh=float(final_ori_threshold),
@@ -2396,23 +3141,94 @@ class X2ControlApi(ApiBase):
             before_close_error["tcp_error_m"] <= float(final_tcp_threshold)
             and before_close_error["ori_error_rad"] <= float(final_ori_threshold)
         )
-        close_attempted = bool(final_reached)
-        if close_attempted:
-            self.close_gripper(arm=arm)
-            self.settle_robot(steps=int(close_hold_steps))
+        close_attempted = False
+        preclose_attempts: list[dict[str, Any]] = []
+        final_close_attempt: dict[str, Any] | None = None
         after_close_tcp_pose = self.get_current_tcp_pose(arm=arm)
-        object_after_close = None
         object_in_hand = None
-        if object_name:
+        if final_reached:
+            for offset_idx, axis_offset in enumerate(preclose_axis_offsets):
+                close_target_tcp_pose = (
+                    grasp_pos + tcp_axis_world * float(axis_offset),
+                    grasp_quat.copy(),
+                )
+                offset_align_ok = True
+                if abs(float(axis_offset)) > 1e-9:
+                    offset_align_ok = self.move_tcp_joint_ik(
+                        close_target_tcp_pose,
+                        arm=arm,
+                        pos_thresh=min(0.018, float(final_tcp_threshold)),
+                        ori_thresh=float(final_ori_threshold),
+                        max_joint_step=max(0.003, float(insert_max_joint_step) * 0.6),
+                        max_steps=260,
+                        settle_steps=max(16, int(settle_steps)),
+                        hold_steps_per_waypoint=max(6, int(insert_hold_steps_per_waypoint)),
+                    )
+                reached_close_tcp_pose = self.get_current_tcp_pose(arm=arm)
+                close_target_pos = np.asarray(close_target_tcp_pose[0], dtype=np.float64).reshape(3)
+                close_target_quat = np.asarray(close_target_tcp_pose[1], dtype=np.float64).reshape(4)
+                close_error = {
+                    "tcp_error_m": float(np.linalg.norm(reached_close_tcp_pose[0] - close_target_pos)),
+                    "ori_error_rad": self._quat_error_rad(reached_close_tcp_pose[1], close_target_quat),
+                    "reached_tcp_pose": reached_close_tcp_pose,
+                    "target_tcp_pose": close_target_tcp_pose,
+                }
+                original_grasp_error = {
+                    "tcp_error_m": float(np.linalg.norm(reached_close_tcp_pose[0] - grasp_pos)),
+                    "ori_error_rad": self._quat_error_rad(reached_close_tcp_pose[1], grasp_quat),
+                    "reached_tcp_pose": reached_close_tcp_pose,
+                    "target_tcp_pose": active_plan["grasp_tcp_pose"],
+                }
+                target_reached = bool(
+                    close_error["tcp_error_m"] <= float(final_tcp_threshold)
+                    and close_error["ori_error_rad"] <= float(final_ori_threshold)
+                )
+                attempt_record = {
+                    "idx": int(offset_idx),
+                    "axis_offset_m": float(axis_offset),
+                    "offset_align_ok": bool(offset_align_ok),
+                    "target_reached": bool(target_reached),
+                    "close_attempted": False,
+                    "close_target_tcp_pose": close_target_tcp_pose,
+                    "close_error": close_error,
+                    "original_grasp_error": original_grasp_error,
+                }
+                if target_reached:
+                    close_attempted = True
+                    attempt_record["close_attempted"] = True
+                    self.close_gripper(arm=arm)
+                    self.settle_robot(steps=int(close_hold_steps))
+                    after_close_tcp_pose = self.get_current_tcp_pose(arm=arm)
+                    try:
+                        object_in_hand = bool(self.check_object_in_hand(arm=arm))
+                    except Exception as exc:
+                        object_in_hand = {"error": repr(exc)}
+                    attempt_record["after_close_tcp_pose"] = after_close_tcp_pose
+                    attempt_record["object_in_hand_after_close"] = object_in_hand
+                    final_close_attempt = attempt_record
+                    preclose_attempts.append(attempt_record)
+                    if object_in_hand is True:
+                        break
+                    if offset_idx < len(preclose_axis_offsets) - 1:
+                        self.open_gripper(arm=arm)
+                        self.settle_robot(steps=max(8, int(settle_steps)))
+                else:
+                    preclose_attempts.append(attempt_record)
+        if object_in_hand is None:
+            object_in_hand = False if close_attempted else False
+        object_after_close = None
+        if object_name and bool(read_after_close_sim_object_pose):
             try:
                 pos, quat, extent = self._scene_object_pose_extent(str(object_name))
                 object_after_close = {"position_world": pos, "quat_xyzw_world": quat, "bbox_extent": extent}
             except Exception as exc:
                 object_after_close = {"error": repr(exc)}
-        try:
-            object_in_hand = bool(self.check_object_in_hand(arm=arm)) if close_attempted else False
-        except Exception as exc:
-            object_in_hand = {"error": repr(exc)}
+        elif object_name:
+            object_after_close = {
+                "skipped": "read_after_close_sim_object_pose_false",
+                "place_offset_source": place_offset_source,
+                "sim_truth": False,
+            }
 
         place_summary: dict[str, Any] | None = None
         place_requested = place_position is not None or place_tcp_pose is not None
@@ -2426,7 +3242,7 @@ class X2ControlApi(ApiBase):
             self.open_gripper(arm=arm)
             self.settle_robot(steps=max(8, int(settle_steps)))
             retreat_to_precontact_ok = self.move_tcp_joint_ik(
-                plan["precontact_tcp_pose"],
+                active_plan["precontact_tcp_pose"],
                 arm=arm,
                 pos_thresh=0.025,
                 ori_thresh=0.35,
@@ -2441,6 +3257,7 @@ class X2ControlApi(ApiBase):
                 "release": False,
                 "retreat_after_release": False,
                 "target_object_position_world": None if place_position is None else np.asarray(place_position, dtype=np.float64).reshape(3),
+                "place_offset_source": place_offset_source,
                 "place_error_m": None,
                 "place_position_threshold": float(place_position_threshold),
                 "retreat_to_precontact_ok": bool(retreat_to_precontact_ok),
@@ -2459,16 +3276,23 @@ class X2ControlApi(ApiBase):
                 hold_steps_per_waypoint=int(insert_hold_steps_per_waypoint),
             )
 
-            grasp_pos, grasp_quat = self._coerce_pose(plan["grasp_tcp_pose"])
+            grasp_pos, grasp_quat = self._coerce_pose(active_plan["grasp_tcp_pose"])
             if place_tcp_pose is None:
                 target_object_pos = np.asarray(place_position, dtype=np.float64).reshape(3)
-                if isinstance(object_after_close, dict) and "position_world" in object_after_close:
+                if place_offset_source in {"visual_grasp_pose", "visual_plan_pose_estimate"}:
+                    visual_object_pos = np.asarray(
+                        (active_plan.get("pose_estimate") or {}).get("position_world"),
+                        dtype=np.float64,
+                    ).reshape(3)
+                    tcp_from_object = current_tcp_pos - visual_object_pos
+                    tcp_from_object_source = "visual_grasp_pose_after_close_tcp"
+                elif isinstance(object_after_close, dict) and "position_world" in object_after_close:
                     close_object_pos = np.asarray(object_after_close["position_world"], dtype=np.float64).reshape(3)
                     tcp_from_object = current_tcp_pos - close_object_pos
                     tcp_from_object_source = "after_close_sim_known_object_pose"
                 else:
                     visual_object_pos = np.asarray(
-                        (plan.get("pose_estimate") or {}).get("position_world", grasp_pos),
+                        (active_plan.get("pose_estimate") or {}).get("position_world", grasp_pos),
                         dtype=np.float64,
                     ).reshape(3)
                     tcp_from_object = grasp_pos - visual_object_pos
@@ -2625,16 +3449,48 @@ class X2ControlApi(ApiBase):
                     pre_descent_quat.copy(),
                 )
                 release_pos, release_quat = self._coerce_pose(release_tcp_pose)
-            place_insert_ok = self.move_tcp_joint_ik(
-                release_tcp_pose,
-                arm=arm,
-                pos_thresh=0.02,
-                ori_thresh=0.3,
-                max_joint_step=float(place_insert_max_joint_step),
-                max_steps=260,
-                settle_steps=int(settle_steps),
-                hold_steps_per_waypoint=int(insert_hold_steps_per_waypoint),
+            descent_waypoint_results = []
+            descent_start_tcp_pose = self.get_current_tcp_pose(arm=arm)
+            descent_start_pos = np.asarray(descent_start_tcp_pose[0], dtype=np.float64).reshape(3)
+            descent_steps = max(1, int(place_descent_waypoints))
+            descent_max_step = (
+                float(place_insert_max_joint_step)
+                if place_descent_max_joint_step is None
+                else float(place_descent_max_joint_step)
             )
+            descent_hold_steps = (
+                int(insert_hold_steps_per_waypoint)
+                if place_descent_hold_steps_per_waypoint is None
+                else int(place_descent_hold_steps_per_waypoint)
+            )
+            place_insert_ok = True
+            for descent_idx, alpha in enumerate(np.linspace(0.0, 1.0, descent_steps + 1)[1:]):
+                waypoint_pos = (1.0 - float(alpha)) * descent_start_pos + float(alpha) * release_pos
+                descent_tcp_pose = (waypoint_pos, release_quat.copy())
+                descent_ok = self.move_tcp_joint_ik(
+                    descent_tcp_pose,
+                    arm=arm,
+                    pos_thresh=0.02,
+                    ori_thresh=0.3,
+                    max_joint_step=descent_max_step,
+                    max_steps=260,
+                    settle_steps=int(settle_steps),
+                    hold_steps_per_waypoint=descent_hold_steps,
+                )
+                reached_descent_tcp_pose = self.get_current_tcp_pose(arm=arm)
+                descent_waypoint_results.append(
+                    {
+                        "name": "release" if descent_idx == descent_steps - 1 else f"place_descent_{descent_idx:02d}",
+                        "ok": bool(descent_ok),
+                        "target_tcp_pose": descent_tcp_pose,
+                        "reached_tcp_pose": reached_descent_tcp_pose,
+                        "tcp_error_m": float(np.linalg.norm(reached_descent_tcp_pose[0] - waypoint_pos)),
+                        "ori_error_rad": self._quat_error_rad(reached_descent_tcp_pose[1], release_quat),
+                    }
+                )
+                place_insert_ok = bool(place_insert_ok and descent_ok)
+            if int(place_pre_release_settle_steps) > 0:
+                self.settle_robot(steps=int(place_pre_release_settle_steps))
             before_release_tcp_pose = self.get_current_tcp_pose(arm=arm)
             before_release_error = {
                 "tcp_error_m": float(np.linalg.norm(before_release_tcp_pose[0] - release_pos)),
@@ -2679,14 +3535,20 @@ class X2ControlApi(ApiBase):
                 "release": bool(release),
                 "retreat_after_release": bool(retreat_after_release),
                 "target_object_position_world": None if place_position is None else np.asarray(place_position, dtype=np.float64).reshape(3),
+                "place_offset_source": place_offset_source,
                 "tcp_from_object_source": tcp_from_object_source,
                 "tcp_from_object": tcp_from_object,
                 "release_tcp_pose": release_tcp_pose,
                 "place_pre_tcp_pose": place_pre_tcp_pose,
                 "pre_descent_tcp_pose": pre_descent_tcp_pose,
-                "transfer_strategy": "explicit_high_tcp_waypoints",
+                "transfer_strategy": "explicit_high_tcp_waypoints_then_slow_vertical_descent",
                 "transfer_waypoints": transfer_waypoint_results,
                 "place_transfer_waypoints": int(place_transfer_waypoints),
+                "descent_waypoints": descent_waypoint_results,
+                "place_descent_waypoints": int(descent_steps),
+                "place_descent_max_joint_step": float(descent_max_step),
+                "place_descent_hold_steps_per_waypoint": int(descent_hold_steps),
+                "place_pre_release_settle_steps": int(place_pre_release_settle_steps),
                 "lift_ok": bool(lift_ok),
                 "place_pre_ok": bool(place_pre_ok),
                 "place_insert_ok": bool(place_insert_ok),
@@ -2737,10 +3599,15 @@ class X2ControlApi(ApiBase):
             "skip_place_if_no_object_in_hand": bool(skip_place_if_no_object_in_hand),
             "precontact_ok": bool(precontact_ok),
             "insertion_results": insertion_results,
+            "precontact_reobserve": precontact_reobserve,
+            "active_plan_summary": self._compact_visual_grasp_plan_summary(active_plan),
             "fine_align_ok": None if fine_align_ok is None else bool(fine_align_ok),
             "close_attempted": bool(close_attempted),
             "before_close_error": before_close_error,
             "before_close_reached": final_reached,
+            "preclose_axis_offsets_m": preclose_axis_offsets,
+            "preclose_attempts": preclose_attempts,
+            "final_close_attempt": final_close_attempt,
             "grasp_ok": bool(grasp_ok),
             "place_motion_steps_ok": place_motion_steps_ok,
             "after_close_tcp_pose": after_close_tcp_pose,
@@ -2750,6 +3617,8 @@ class X2ControlApi(ApiBase):
             "place": place_summary or {"requested": False},
             "obstacles_world": obstacles_world,
             "transfer_obstacles_world": transfer_obstacles,
+            "place_offset_source": place_offset_source,
+            "read_after_close_sim_object_pose": bool(read_after_close_sim_object_pose),
             "contract": "grasp, precontact, insertion, and place TCP poses are T_world_tcp; place_position is a world-frame object-center target",
             "last_motion_debug": self.get_last_motion_debug(),
         }
@@ -2767,8 +3636,21 @@ class X2ControlApi(ApiBase):
         workspace_bounds: dict[str, tuple[float, float]] | None = None,
         candidate_indices: list[int] | tuple[int, ...] | None = None,
         place_position_threshold: float = 0.10,
+        obstacle_source: str | None = None,
         use_sim_known_obstacles: bool = True,
-        sim_place_correction_steps: int = 2,
+        place_offset_source: str = "after_close_sim_known",
+        sim_place_correction_steps: int | None = None,
+        grasp_tcp_axis_offsets_m: list[float] | tuple[float, ...] | None = None,
+        reobserve_at_precontact: bool = False,
+        reobserve_distance_m: float = 0.08,
+        reobserve_min_mask_pixels: int = 1000,
+        reobserve_min_depth_points: int = 64,
+        reobserve_max_object_shift_m: float = 0.04,
+        reobserve_max_grasp_shift_m: float = 0.05,
+        place_descent_waypoints: int = 1,
+        place_descent_max_joint_step: float | None = None,
+        place_descent_hold_steps_per_waypoint: int | None = None,
+        place_pre_release_settle_steps: int = 0,
     ) -> dict[str, Any]:
         """Pick an object with vision and place it at a world-frame target.
 
@@ -2800,10 +3682,32 @@ class X2ControlApi(ApiBase):
                 gripper, the API can replan with the next candidate.
             place_position_threshold: Success radius in meters for final
                 object-center placement.
+            obstacle_source: ``"sim_known"`` uses the accepted simulation
+                baseline obstacles from scene AABBs. ``"rgbd_visual"`` uses
+                SAM2 mask/depth and RGB-D table-plane geometry. ``"none"``
+                disables explicit world obstacles.
             use_sim_known_obstacles: If true, use sim-known obstacle boxes.
-                This is acceptable for short-term simulation integration only.
+                Kept for backwards compatibility; ignored when
+                ``obstacle_source`` is explicitly set.
+            place_offset_source: ``"after_close_sim_known"`` preserves the
+                simulation baseline. ``"visual_grasp_pose"`` uses the
+                grasp-time visual object pose to compute the release TCP
+                offset and avoids after-close object pose truth for placement.
             sim_place_correction_steps: Number of sim-only pre-release object
-                center correction steps. Set to ``0`` to disable.
+                center correction steps. If omitted, defaults to ``2`` for the
+                sim-known baseline and ``0`` for the RGB-D visual path.
+            grasp_tcp_axis_offsets_m: Optional close-time offsets along the
+                visual TCP approach axis. The default ``None`` preserves the
+                baseline single close at the planned TCP. Experimental RGB-D
+                runs can pass a small sweep such as ``(0.0, 0.004, 0.008)``.
+            reobserve_at_precontact: Experimental half-closed-loop pick
+                correction. If true, the executor re-runs RGB-D detection,
+                segmentation, pose estimation, and grasp selection at
+                precontact, then adopts the new grasp only if quality gates
+                pass.
+            place_descent_waypoints: Experimental slow-place control. ``1``
+                preserves the baseline single release descent; larger values
+                make the final descent more vertical and gradual.
 
         Returns:
             Dict with ``ok``, ``plan``, ``obstacles_world``, and ``execution``.
@@ -2818,13 +3722,36 @@ class X2ControlApi(ApiBase):
             if orientation_quat_xyzw is None
             else np.asarray(orientation_quat_xyzw, dtype=np.float64).reshape(4)
         )
+        resolved_obstacle_source = str(
+            obstacle_source if obstacle_source is not None else ("sim_known" if use_sim_known_obstacles else "none")
+        )
+        valid_obstacle_sources = {"sim_known", "rgbd_visual", "none"}
+        if resolved_obstacle_source not in valid_obstacle_sources:
+            return {
+                "ok": False,
+                "source": "x2_visual_pick_place",
+                "stage": "argument_validation",
+                "error": f"unsupported obstacle_source: {resolved_obstacle_source!r}",
+                "valid_obstacle_sources": sorted(valid_obstacle_sources),
+            }
+        place_offset_source = str(place_offset_source)
+        if sim_place_correction_steps is None:
+            effective_sim_place_correction_steps = (
+                0
+                if resolved_obstacle_source == "rgbd_visual"
+                or place_offset_source in {"visual_grasp_pose", "visual_plan_pose_estimate"}
+                else 2
+            )
+        else:
+            effective_sim_place_correction_steps = int(sim_place_correction_steps)
 
         self.settle_robot(steps=8)
         self.open_gripper(arm=arm)
         self.settle_robot(steps=12)
 
         obstacles_world = None
-        if use_sim_known_obstacles and table_name:
+        obstacle_plan: dict[str, Any] | None = None
+        if resolved_obstacle_source == "sim_known" and table_name:
             obstacles_world = self.get_sim_known_tabletop_obstacles(
                 object_name,
                 table_name,
@@ -2838,6 +3765,7 @@ class X2ControlApi(ApiBase):
         base_plan: dict[str, Any] | None = None
         last_plan: dict[str, Any] | None = None
         last_execution: dict[str, Any] | None = None
+        visual_obstacle_result: dict[str, Any] | None = None
         for attempt_idx, candidate_index in enumerate(indices):
             if base_plan is None:
                 plan = self.plan_visual_grasp_tcp_pose(
@@ -2901,6 +3829,36 @@ class X2ControlApi(ApiBase):
                 )
                 continue
 
+            if resolved_obstacle_source == "rgbd_visual":
+                if visual_obstacle_result is None:
+                    visual_obstacle_result = self.get_rgbd_visual_tabletop_obstacles(
+                        base_plan or plan,
+                        object_name=object_name,
+                        table_name=table_name or "visual_table",
+                        workspace_bounds=workspace_bounds,
+                        object_margin=0.012,
+                        table_margin_xy=0.02,
+                        table_margin_z=0.006,
+                    )
+                plan["obstacle_plan"] = visual_obstacle_result
+                obstacle_plan = visual_obstacle_result
+                if not visual_obstacle_result.get("ok"):
+                    attempts.append(
+                        {
+                            "attempt": int(attempt_idx),
+                            "candidate_index": int(candidate_index),
+                            "ok": False,
+                            "stage": "rgbd_visual_obstacles",
+                            "obstacle_errors": visual_obstacle_result.get("errors"),
+                            "obstacle_point_counts": visual_obstacle_result.get("point_counts"),
+                            "visual_artifact_dir": visual_obstacle_result.get("visual_artifact_dir"),
+                        }
+                    )
+                    break
+                obstacles_world = list(visual_obstacle_result.get("obstacles_world") or [])
+            elif resolved_obstacle_source == "none":
+                obstacles_world = None
+
             execution = self.execute_tcp_grasp_plan(
                 plan,
                 arm=arm,
@@ -2926,9 +3884,28 @@ class X2ControlApi(ApiBase):
                 place_position_threshold=float(place_position_threshold),
                 require_object_in_hand_for_place=True,
                 skip_place_if_no_object_in_hand=True,
-                place_object_correction_steps=int(sim_place_correction_steps),
+                place_offset_source=place_offset_source,
+                read_after_close_sim_object_pose=place_offset_source == "after_close_sim_known",
+                place_object_correction_steps=int(effective_sim_place_correction_steps),
                 place_object_correction_threshold=0.025,
                 place_object_correction_max_step=0.05,
+                grasp_tcp_axis_offsets_m=grasp_tcp_axis_offsets_m,
+                reobserve_at_precontact=bool(reobserve_at_precontact),
+                reobserve_prompts=prompt_list,
+                reobserve_camera_name=selected_camera_name,
+                reobserve_orientation_quat_xyzw=reference_quat,
+                reobserve_workspace_bounds=workspace_bounds,
+                reobserve_distance_m=float(reobserve_distance_m),
+                reobserve_insert_waypoints=10,
+                reobserve_candidate_index=int(candidate_index),
+                reobserve_min_mask_pixels=int(reobserve_min_mask_pixels),
+                reobserve_min_depth_points=int(reobserve_min_depth_points),
+                reobserve_max_object_shift_m=float(reobserve_max_object_shift_m),
+                reobserve_max_grasp_shift_m=float(reobserve_max_grasp_shift_m),
+                place_descent_waypoints=int(place_descent_waypoints),
+                place_descent_max_joint_step=place_descent_max_joint_step,
+                place_descent_hold_steps_per_waypoint=place_descent_hold_steps_per_waypoint,
+                place_pre_release_settle_steps=int(place_pre_release_settle_steps),
             )
             last_execution = execution
             attempts.append(
@@ -2942,6 +3919,9 @@ class X2ControlApi(ApiBase):
                     "before_close_reached": bool(execution.get("before_close_reached")),
                     "object_in_hand_after_close": execution.get("object_in_hand_after_close"),
                     "before_close_error": execution.get("before_close_error"),
+                    "preclose_axis_offsets_m": execution.get("preclose_axis_offsets_m"),
+                    "final_close_attempt": execution.get("final_close_attempt"),
+                    "precontact_reobserve": execution.get("precontact_reobserve"),
                     "place": execution.get("place"),
                 }
             )
@@ -2951,7 +3931,7 @@ class X2ControlApi(ApiBase):
                 break
 
         if last_plan is None or not last_plan.get("ok"):
-            return {
+            result = {
                 "ok": False,
                 "source": "x2_visual_pick_place",
                 "stage": "plan_visual_grasp_tcp_pose",
@@ -2959,23 +3939,39 @@ class X2ControlApi(ApiBase):
                 "attempts": attempts,
                 "contract": "visual and action targets are T_world_tcp",
             }
+            self._maybe_save_pick_place_result_artifact(result)
+            return result
         execution = last_execution or {"ok": False, "error": "no execution attempt completed"}
-        return {
+        result = {
             "ok": bool(execution.get("ok")),
             "source": "x2_visual_pick_place",
             "object_name": object_name,
             "place_position_world": np.asarray(place_position, dtype=np.float64).reshape(3),
             "place_position_threshold": float(place_position_threshold),
             "plan": last_plan,
+            "obstacle_source": resolved_obstacle_source,
+            "obstacle_plan": obstacle_plan,
             "obstacles_world": obstacles_world,
             "execution": execution,
             "attempts": attempts,
             "contract": "visual grasp plan and action targets are T_world_tcp; place_position is world-frame object center",
             "sim_only": {
-                "sim_known_obstacles": bool(use_sim_known_obstacles and table_name),
-                "sim_place_correction_steps": int(sim_place_correction_steps),
+                "sim_known_obstacles": bool(resolved_obstacle_source == "sim_known" and table_name),
+                "after_close_sim_known_place_offset": bool(place_offset_source == "after_close_sim_known"),
+                "sim_place_correction_steps": int(effective_sim_place_correction_steps),
+                "object_in_hand_and_reward_still_sim": True,
+            },
+            "real_work_friendly": {
+                "rgbd_visual_obstacles": bool(resolved_obstacle_source == "rgbd_visual"),
+                "visual_grasp_pose_place_offset": bool(
+                    place_offset_source in {"visual_grasp_pose", "visual_plan_pose_estimate"}
+                ),
+                "precontact_reobserve": bool(reobserve_at_precontact),
+                "slow_place_descent": bool(int(place_descent_waypoints) > 1),
             },
         }
+        self._maybe_save_pick_place_result_artifact(result)
+        return result
 
     def sample_grasp_pose(self, object_name: str, arm: int = 1) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
         """Sample a near-field top-down grasp pose for an object.

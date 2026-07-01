@@ -6,6 +6,7 @@ from capx.envs.tasks.x2.x2_pick_place_red_cube_two_targets import (
     X2PickPlaceRedCubeTwoTargetsLeftCodeEnv,
 )
 from capx.envs.tasks.x2.x2_pick_place_two_objects import X2PickPlaceTwoObjectsBlueRightCodeEnv
+from capx.envs.tasks.x2.x2_pick_place_two_objects import X2PickPlaceTwoObjectsBlueRightRgbdVisualCodeEnv
 
 
 class _DummyEnv:
@@ -31,6 +32,10 @@ def test_x2_pick_place_api_prompt_docs_include_pose_contract():
     assert "T_world_tcp" in docs
     assert "place_position" in docs
     assert "sim-known" in docs
+    assert "obstacle_source" in docs
+    assert "rgbd_visual" in docs
+    assert "place_offset_source" in docs
+    assert "visual_grasp_pose" in docs
 
 
 def test_x2_pick_place_api_does_not_expose_debug_motion_or_camera_helpers():
@@ -68,6 +73,22 @@ def test_x2_two_object_task_uses_generic_visual_pick_place_primitive():
     assert 'prompts=["blue cube", "blue block", "blue box"]' in oracle
     assert "pick_and_place_red_cube_to_right_target" not in oracle
     assert "plan_visual_grasp_tcp_pose" not in oracle
+    assert "execute_tcp_grasp_plan" not in oracle
+
+
+def test_x2_two_object_rgbd_visual_variant_selects_experimental_route():
+    prompt = X2PickPlaceTwoObjectsBlueRightRgbdVisualCodeEnv.prompt
+    oracle = X2PickPlaceTwoObjectsBlueRightRgbdVisualCodeEnv.oracle_code
+
+    assert 'pick_and_place_visual_object(' in prompt
+    assert 'pick_and_place_visual_object(' in oracle
+    assert 'obstacle_source="rgbd_visual"' in oracle
+    assert 'place_offset_source="visual_grasp_pose"' in oracle
+    assert "sim_place_correction_steps=0" in oracle
+    assert "reobserve_at_precontact=True" in oracle
+    assert "candidate_indices=(1, 2)" in oracle
+    assert "place_descent_waypoints=4" in oracle
+    assert "get_sim_known_tabletop_obstacles" not in oracle
     assert "execute_tcp_grasp_plan" not in oracle
 
 

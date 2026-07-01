@@ -28,6 +28,12 @@ simulation:
 - The two-object extension passed oracle and `codex-a` non-oracle runs where
   generated code selected the blue cube through `pick_and_place_visual_object`
   and placed it at the right marker.
+- The experimental RGB-D obstacle route has one oracle success using
+  perception-derived object/table boxes and visual grasp-pose placement
+  offset. A follow-up experimental upgrade adds one precontact reobserve with
+  quality-gated fallback and a slower vertical place descent. It is evidence
+  for the next 2real-oriented path, not a replacement for the accepted
+  sim-known baseline yet.
 - `scripts/check_x2_acceptance.py` and
   `scripts/audit_x2_capx_integration.py --strict` both pass.
 
@@ -63,6 +69,15 @@ Two objects, choose blue cube and place at right marker:
 ```text
 env_configs/x2/x2_pick_place_two_objects_blue_right.yaml
 docs/x2-two-object-blue-right-extension-20260630.md
+```
+
+Experimental two-object route with RGB-D visual obstacle boxes and visual
+grasp-pose placement offset:
+
+```text
+env_configs/x2/x2_pick_place_two_objects_blue_right_rgbd_visual.yaml
+docs/x2-rgbd-visual-obstacle-upgrade-20260630.md
+scripts/run_x2_two_object_blue_right_rgbd_visual_oracle_smoke.sh
 ```
 
 These tasks use `X2PickPlaceApi`; ordinary generated code should not create
@@ -114,6 +129,33 @@ come from sim-known OmniGibson scene AABBs with engineering inflation margins.
 The elevated object-center correction before release is also sim-only. This is
 acceptable for the current CaP-X simulation integration goal, but it is not a
 2real obstacle-perception solution.
+
+The experimental route can be selected explicitly with:
+
+```python
+pick_and_place_visual_object(
+    ...,
+    obstacle_source="rgbd_visual",
+    place_offset_source="visual_grasp_pose",
+    sim_place_correction_steps=0,
+    candidate_indices=(1, 2),
+    grasp_tcp_axis_offsets_m=(0.0, 0.004, 0.008, 0.012),
+    reobserve_at_precontact=True,
+    reobserve_distance_m=0.08,
+    reobserve_max_object_shift_m=0.025,
+    reobserve_max_grasp_shift_m=0.035,
+    place_descent_waypoints=4,
+)
+```
+
+In that route, the object obstacle box is estimated from the target SAM2 mask
+and depth points; the table box is estimated from RGB-D points outside the
+target mask; the executor can reobserve once at precontact and adopt the new
+grasp only if mask/depth/shift/IK quality gates pass; the release TCP offset is
+computed from the grasp-time visual object pose and the actual TCP pose after
+close; and place descends through multiple vertical waypoints before opening
+the gripper. Remaining sim-only reads are evaluation signals such as
+`check_object_in_hand`, reward, and `place_error_m`.
 
 ## Validated Evidence
 
@@ -237,6 +279,56 @@ The full extension record is:
 docs/x2-two-object-blue-right-extension-20260630.md
 ```
 
+The experimental RGB-D obstacle route record is:
+
+```text
+docs/x2-rgbd-visual-obstacle-upgrade-20260630.md
+
+Oracle success:
+outputs/oracle/oracle/x2_pick_place_two_objects_blue_right_rgbd_visual_manual_rgbd_visual_overinsert_20260630_173023/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/
+
+Visual artifacts:
+outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_manual_rgbd_visual_overinsert_20260630_173023/x2_pick_place_blue_cube_20260630_173244_130/
+
+before_close_tcp_error_m=0.007957604188105115
+before_close_ori_error_rad=0.022499107681727935
+object_in_hand_after_close=True
+final_close_axis_offset_m=0.0
+place_error_m=0.025959445657849266
+Reward=1.0
+Task Completed=True
+```
+
+That success predates the precontact reobserve / slow descent upgrade. New
+evidence for the upgraded route:
+
+```text
+Oracle success:
+outputs/oracle/oracle/x2_pick_place_two_objects_blue_right_rgbd_visual_manual_rgbd_visual_reobserve_fast_20260630_183604/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/
+
+Videos:
+video_combined_global.mp4
+video_combined_robot.mp4
+
+Visual artifacts:
+outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_manual_rgbd_visual_reobserve_fast_20260630_183604/x2_pick_place_blue_cube_20260630_183817_658/
+outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_manual_rgbd_visual_reobserve_fast_20260630_183604/x2_pick_place_blue_cube_20260630_183928_672/
+
+reobserve_adopted=True
+reobserve_reason=quality_gates_passed
+reobserve mask_pixels=8215
+reobserve depth_points=8210
+reobserve object_shift_m=0.000014924572561476803
+reobserve grasp_shift_m=0.004602285628847467
+before_close_tcp_error_m=0.011525492473389909
+before_close_ori_error_rad=0.03224944203486641
+object_in_hand_after_close=True
+place_error_m=0.02411113666043054
+place_descent_waypoints=4
+Reward=1.0
+Task Completed=True
+```
+
 ## Re-run Non-Oracle Evidence
 
 If the GPT API key is already configured in the local `codex-a` command, use
@@ -326,10 +418,10 @@ X2_INTEGRATION_AUDIT COMPLETE
 ## Remaining Work Outside This Baseline
 
 The X2 CaP-X tabletop integration can be treated as complete for the current
-simulation scope. The next work is new scope:
+accepted simulation scope. The next work is new scope:
 
-- Replace sim-known obstacle boxes with perception-derived table/object
-  geometry.
+- Promote the experimental RGB-D route only after repeated oracle/non-oracle
+  evidence; the current accepted record is still the sim-known baseline.
 - Add more task objects and target layouts.
 - Decide whether to expose lower-level `plan_visual_grasp_tcp_pose()` /
   `execute_tcp_grasp_plan()` for tasks that need custom post-grasp behavior.
