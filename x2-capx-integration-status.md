@@ -1,6 +1,6 @@
 # X2 CaP-X Integration Status
 
-Date: 2026-06-30
+Date: 2026-07-01
 
 This page is the current acceptance checklist for bringing X2 into the CaP-X
 BEHAVIOR tabletop workflow. It records the accepted stable path and the
@@ -28,10 +28,10 @@ simulation:
 - The two-object extension passed oracle and `codex-a` non-oracle runs where
   generated code selected the blue cube through `pick_and_place_visual_object`
   and placed it at the right marker.
-- The experimental RGB-D obstacle route has one oracle success using
-  perception-derived object/table boxes and visual grasp-pose placement
-  offset. A follow-up experimental upgrade adds one precontact reobserve with
-  quality-gated fallback and a slower vertical place descent. It is evidence
+- The experimental RGB-D obstacle route now has oracle and `codex-a`
+  non-oracle successes using perception-derived object/table boxes,
+  visual grasp-pose placement offset, one precontact reobserve with
+  quality-gated fallback, and a slower vertical place descent. It is evidence
   for the next 2real-oriented path, not a replacement for the accepted
   sim-known baseline yet.
 - `scripts/check_x2_acceptance.py` and
@@ -78,6 +78,7 @@ grasp-pose placement offset:
 env_configs/x2/x2_pick_place_two_objects_blue_right_rgbd_visual.yaml
 docs/x2-rgbd-visual-obstacle-upgrade-20260630.md
 scripts/run_x2_two_object_blue_right_rgbd_visual_oracle_smoke.sh
+scripts/run_x2_two_object_blue_right_rgbd_visual_codex_a_non_oracle_smoke.sh
 ```
 
 These tasks use `X2PickPlaceApi`; ordinary generated code should not create
@@ -179,6 +180,37 @@ before_close_tcp_error_m=0.011122489380341058
 before_close_ori_error_rad=0.03634797048888362
 object_in_hand_after_close=True
 place_error_m=0.013434781081554163
+Reward=1.0
+Task Completed=True
+```
+
+Latest `codex-a` non-oracle RGB-D route evidence:
+
+```text
+Codex-a non-oracle success:
+outputs/codex-a/codex-a/x2_pick_place_two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/
+
+Videos:
+video_combined_global.mp4
+video_combined_robot.mp4
+
+Generated code:
+RESULT = pick_and_place_visual_object(...)
+
+Visual artifacts:
+outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/x2_pick_place_blue_cube_20260701_115434_152/
+outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/x2_pick_place_blue_cube_20260701_115611_311/
+
+obstacle_source=rgbd_visual
+place_offset_source=visual_grasp_pose
+reobserve_adopted=True
+reobserve_reason=quality_gates_passed
+before_close_tcp_error_m=0.010910568687270814
+before_close_ori_error_rad=0.026704567279301608
+final_close_axis_offset_m=0.004
+object_in_hand_after_close=True
+place_error_m=0.019196923124027467
+place_descent_waypoints=4
 Reward=1.0
 Task Completed=True
 ```

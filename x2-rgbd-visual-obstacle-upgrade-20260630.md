@@ -242,6 +242,12 @@ Oracle smoke for the experimental route:
 scripts/run_x2_two_object_blue_right_rgbd_visual_oracle_smoke.sh
 ```
 
+Codex-a non-oracle smoke for the experimental route:
+
+```bash
+scripts/run_x2_two_object_blue_right_rgbd_visual_codex_a_non_oracle_smoke.sh
+```
+
 Config:
 
 ```text
@@ -351,4 +357,41 @@ trial_time_s=245.88
 rgbd_obstacles_sim_truth=False
 object obstacle source=rgbd_object_mask_aabb, points=8208
 table obstacle source=rgbd_table_plane_aabb, table plane points=44592
+```
+
+Latest codex-a non-oracle smoke:
+
+```text
+trial:
+outputs/codex-a/codex-a/x2_pick_place_two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1
+
+videos:
+outputs/codex-a/codex-a/x2_pick_place_two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/video_combined_global.mp4
+outputs/codex-a/codex-a/x2_pick_place_two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/trial_01_sandboxrc_0_reward_1.000_taskcompleted_1/video_combined_robot.mp4
+
+visual artifacts:
+outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/x2_pick_place_blue_cube_20260701_115434_152/
+outputs/x2_visual_artifacts/two_objects_blue_right_rgbd_visual_codex_a_non_oracle_manual_rgbd_visual_codex_a_20260701_115145/x2_pick_place_blue_cube_20260701_115611_311/
+
+generated code:
+RESULT = pick_and_place_visual_object(...)
+
+metrics:
+ok=True
+reward=1.000
+task_completed=1
+candidate_index=1
+obstacle_source=rgbd_visual
+place_offset_source=visual_grasp_pose
+reobserve_adopted=True
+reobserve_reason=quality_gates_passed
+before_close_tcp_error_m=0.010910568687270814
+before_close_ori_error_rad=0.026704567279301608
+final_close_axis_offset_m=0.004
+object_in_hand_after_close=True
+place_error_m=0.019196923124027467
+place_descent_waypoints=4
+rgbd_obstacles_sim_truth=False
+object obstacle source=rgbd_object_mask_aabb, points=8207
+table obstacle source=rgbd_table_plane_aabb, table plane points=44596
 ```
