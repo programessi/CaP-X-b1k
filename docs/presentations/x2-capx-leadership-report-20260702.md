@@ -151,6 +151,41 @@ rgbd_obstacles_sim_truth = False
 - 最终修复策略使用 `post_lift_current` 作为 place orientation，并在 place-pre 已到位时跳过冗余 IK move。
 - 修复后在三个 held-out validation seed 上均完成任务。
 
+### 参数级 ASPIRE-lite 的作用示例
+
+当前参数级修复的效果是：在不改底层 X2 控制器、不改视觉模型、不改 PyRoKi/IK 实现的前提下，把失败记录转化为高层 primitive 的候选参数，并通过多 seed 执行筛选出更稳定的一组策略。
+
+以 `object_not_in_hand_after_close` 为例，失败 trace 会记录：
+
+```text
+before_close_tcp_error_m
+before_close_ori_error_rad
+selected_grasp_candidate
+final_close_axis_offset_m
+object_in_hand_after_close
+task_completed
+```
+
+如果闭合前 TCP 误差较小但 `object_in_hand_after_close=False`，failure report 会将主失败归类为 `object_not_in_hand_after_close`，并给出类似修复方向：
+
+```text
+increase_grasp_tcp_axis_offsets
+try_next_grasp_candidate
+slow_down_close
+```
+
+随后 candidate search 不改程序结构，只改变高层 primitive 参数，例如：
+
+```text
+candidate_indices:              0        -> 1,2 或 1,2,3
+grasp_tcp_axis_offsets_m:        0.0      -> 0.0,0.004,0.008,0.012
+reobserve_at_precontact:         0        -> 1
+place_descent_waypoints:         1        -> 4
+place_orientation_source:        grasp    -> post_lift_current
+```
+
+这些候选会先在 debug seed 中比较，再把较好的候选放到 held-out validation seed 上验证。当前记录中的候选过程从失败和半成功策略推进到最终 `repair_place_keep_lift_orientation_v1` 的 3/3 validation。这个结果说明参数级修复已经能完成可复验的失败归因和策略筛选，但还不是完整 ASPIRE 的代码级 skill 自修改。
+
 ## ASPIRE-lite 当前实现
 
 当前实现覆盖以下组件：

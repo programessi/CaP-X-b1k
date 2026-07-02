@@ -914,6 +914,48 @@
             <p><a href="assets/x2_aspire_val_nominal_shift.mp4">打开 seed 1 视频</a> · <a href="assets/x2_aspire_val_centered.mp4">打开 seed 2 视频</a> · <a href="assets/x2_aspire_val_right_shift.mp4">打开 seed 3 视频</a></p>
           </div>
         </div>
+        <div class="card">
+          <span class="video-label">实验 3 · 参数级修复示例</span>
+          <h3>从失败记录到候选参数</h3>
+          <p>当前参数级 ASPIRE-lite 的作用，是在不改底层 X2 控制器、不改视觉模型、不改 PyRoKi/IK 实现的前提下，把失败 trace 转化为高层 primitive 的候选参数，并通过多 seed 执行筛选出更稳定的一组策略。</p>
+          <table class="seed-table">
+            <thead>
+              <tr>
+                <th>阶段</th>
+                <th>记录或动作</th>
+                <th>作用</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>失败 trace</td>
+                <td><code>before_close_tcp_error_m</code>、<code>before_close_ori_error_rad</code>、<code>selected_grasp_candidate</code>、<code>object_in_hand_after_close</code></td>
+                <td>判断机械臂是否已经接近抓取位姿，以及失败是否发生在闭爪之后。</td>
+              </tr>
+              <tr>
+                <td>failure report</td>
+                <td><code>object_not_in_hand_after_close</code></td>
+                <td>说明主要问题不是没检测到目标，也不是 IK 完全不可达，而是闭爪后没有把物体夹住。</td>
+              </tr>
+              <tr>
+                <td>repair tags</td>
+                <td><code>increase_grasp_tcp_axis_offsets</code>、<code>try_next_grasp_candidate</code>、<code>slow_down_close</code></td>
+                <td>把失败原因转成可测试的修复方向。</td>
+              </tr>
+              <tr>
+                <td>参数候选</td>
+                <td><code>candidate_indices</code>、<code>grasp_tcp_axis_offsets_m</code>、<code>reobserve_at_precontact</code>、<code>place_descent_waypoints</code>、<code>place_orientation_source</code></td>
+                <td>保持任务程序结构不变，只改变高层 primitive 的受控参数。</td>
+              </tr>
+              <tr>
+                <td>多 seed 验证</td>
+                <td><code>val_nominal_shift</code>、<code>val_centered</code>、<code>val_right_shift</code></td>
+                <td>避免只在单个视频上偶然成功，验证修复策略对小范围布局变化是否稳定。</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>本轮记录中的候选过程从失败和半成功策略推进到 <code>repair_place_keep_lift_orientation_v1</code> 的 <strong>3/3 validation</strong>。这个结果说明参数级修复已经能完成可复验的失败归因和策略筛选，但还不是完整 ASPIRE 的代码级 skill 自修改。</p>
+        </div>
       </div>
       <div class="callout">
         <strong>汇报顺序：</strong>先展示实验 2 的三张视觉中间结果、抓取位姿表和完整执行视频；实验 3 重点说明候选调试到最终 3/3 validation 的过程，再播放三条 seed 视频中的关键片段。
