@@ -463,6 +463,68 @@
       font-size: 14px;
       font-weight: 700;
     }
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 22px;
+      margin-top: 22px;
+    }
+    .evidence-card {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1fr);
+      gap: 20px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 18px;
+    }
+    .evidence-card video,
+    .evidence-card img {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #000;
+      display: block;
+    }
+    .evidence-card video {
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+    }
+    .evidence-card h3 {
+      margin-top: 4px;
+    }
+    .evidence-card p {
+      color: #475569;
+    }
+    .visual-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .visual-strip figure {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .visual-strip img {
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      background: #f8fafc;
+    }
+    .visual-strip figcaption {
+      padding: 8px 2px 0;
+      font-size: 12px;
+      color: #475569;
+    }
+    .seed-table {
+      margin-top: 14px;
+      font-size: 13px;
+    }
+    .seed-table th,
+    .seed-table td {
+      padding: 8px 8px;
+    }
     .callout {
       background: #fffbeb;
       border-left-color: #d97706;
@@ -470,7 +532,9 @@
     }
     @media (max-width: 920px) {
       .hero-inner,
-      .video-intro {
+      .video-intro,
+      .evidence-card,
+      .visual-strip {
         grid-template-columns: 1fr;
       }
       .hero {
@@ -492,7 +556,7 @@
         <p class="eyebrow">X2 接入 CaP-X / BEHAVIOR 工作汇报 · 2026-07-02</p>
         <h1>从 5090 仿真环境适配到 X2 视觉抓取闭环</h1>
         <p class="subtitle">
-          这项工作的核心不是单个抓取视频，而是把自研 X2 机器人接入 BEHAVIOR/CaP-X 的任务体系，并形成可继续迁移到实物的视觉、动作和调试闭环。
+          本阶段完成 X2 在 BEHAVIOR/CaP-X 任务体系中的接入，覆盖仿真环境、机器人模型、夹爪执行、视觉抓取、动作控制和运行诊断。
         </p>
         <div class="meta">
           <span class="tag">Isaac Sim 5.1 / BEHAVIOR</span>
@@ -514,9 +578,9 @@
 
   <main>
     <section>
-      <h2>一句话结论</h2>
+      <h2>总体进展</h2>
       <p class="lead">
-        我已经把 X2 从“能被仿真加载”推进到“能被 CaP-X 以高层 primitive 调用并完成桌面 pick-place 任务”的阶段；同时保留了面向实物部署的 x2-agent-lab 路线，并在 CaP-X 侧加入 ASPIRE-like 的 trace、失败分类和候选策略验证能力。
+        X2 已从模型加载阶段推进到可由 CaP-X 高层 primitive 调用并完成桌面 pick-place 任务的阶段；同时保留面向实物部署的 x2-agent-lab 路线，并在 CaP-X 侧加入 ASPIRE-like 的 trace、失败分类和候选策略验证能力。
       </p>
       <div class="grid">
         <div class="card">
@@ -535,7 +599,7 @@
     </section>
 
     <section>
-      <h2>为什么这件事不是直接改 CaP-X 就能完成</h2>
+      <h2>技术路线</h2>
       <div class="timeline">
         <div class="step">
           <div class="phase">阶段 1</div>
@@ -599,80 +663,123 @@
     </section>
 
     <section>
-      <h2>已经能展示的视频证据</h2>
+      <h2>阶段验证</h2>
       <div class="video-intro">
         <div class="card">
-          <h3>为什么三个视频画面相似</h3>
-          <p>三个视频都是同一个桌面 pick-place 场景，所以画面上都像“机械臂抓方块”。它们真正展示的是不同层级的工程闭环。</p>
+          <h3>验证组织</h3>
+          <p>本页将验证材料按工程能力拆分，分别对应机器人接入、视觉链路和 ASPIRE-lite 调试验证。视频作为运行记录，视觉中间结果和指标作为主要解释依据。</p>
           <ul>
-            <li>第一个看 CaP-X 任务注入是否成立：LLM/任务代码只调用高层 primitive。</li>
-            <li>第二个看视觉链路是否成立：目标选择、分割、RGB-D 障碍物、抓取位姿接入动作。</li>
-            <li>第三个看 ASPIRE-lite 是否有用：通过 trace/candidate 发现并修复 place 阶段不稳定。</li>
+            <li>实验 1 展示 X2 导入夹爪后，机械臂和夹爪低级动作可以执行。</li>
+            <li>实验 2 展示视觉 primitive 的中间产物，不只展示最终抓取视频。</li>
+            <li>实验 3 展示不同 seed 下目标/干扰物位置变化，以及修复策略的验证指标。</li>
           </ul>
         </div>
         <div class="card">
-          <h3>现场播放建议</h3>
-          <p>不要连续完整播放三个视频。建议每个视频只播放 10-20 秒，同时讲清楚“这一段证明的是哪一层能力”。</p>
-          <p>主视频用 RGB-D non-oracle；ASPIRE-lite 视频作为“修复后 validation”证据。</p>
+          <h3>验证范围</h3>
+          <p>验证覆盖模型导入、夹爪执行、视觉感知、动作执行和失败诊断。实验三的三个 seed 使用不同的目标方块位置和干扰物位置。</p>
         </div>
       </div>
-      <div class="media-grid">
-        <figure>
-          <video controls preload="metadata" poster="assets/x2_two_target_codex_a.jpg">
-            <source src="assets/x2_two_target_codex_a.mp4" type="video/mp4" />
+
+      <div class="evidence-grid">
+        <div class="evidence-card">
+          <video controls preload="metadata" poster="assets/x2_gripper_motion_primitives.jpg">
+            <source src="assets/x2_gripper_motion_primitives.mp4" type="video/mp4" />
           </video>
-          <figcaption>
-            <span class="video-label">视频 1 · CaP-X 接入</span>
-            <strong>高层 primitive 可以驱动 X2 完成任务</strong>
+          <div>
+            <span class="video-label">实验 1 · X2 夹爪与低级动作验证</span>
+            <h3>导入夹爪后，X2 具备执行任务的基本动作条件</h3>
+            <p>该实验验证 X2 带 85 型欠驱动夹爪版本可以在 BEHAVIOR/Isaac Sim 中加载、运动、保持末端姿态，并执行夹爪闭合/打开。</p>
             <ul class="caption-list">
-              <li>证明 X2 已经进入 CaP-X 任务体系。</li>
-              <li>任务 setup 在 config/env 层，不由生成代码手动搭场景。</li>
-              <li>LLM 侧只需要调用目标 primitive。</li>
+              <li>验证自定义机器人导入和夹爪装配链路可用。</li>
+              <li>验证动作原语调试具备硬件模型基础。</li>
+              <li>为后续视觉抓取任务提供可执行末端执行器。</li>
             </ul>
-            <div class="video-message">讲解重点：这不是手写仿真脚本，而是 CaP-X 风格的注入式任务执行。</div>
-            <a href="assets/x2_two_target_codex_a.mp4">打开 two-target non-oracle 视频</a>
-          </figcaption>
-        </figure>
-        <figure>
-          <video controls preload="metadata" poster="assets/x2_rgbd_codex_a.jpg">
-            <source src="assets/x2_rgbd_codex_a.mp4" type="video/mp4" />
-          </video>
-          <figcaption>
-            <span class="video-label">视频 2 · 视觉动作闭环</span>
-            <strong>RGB-D visual route 完成蓝色方块抓取放置</strong>
+            <p><a href="assets/x2_gripper_motion_primitives.mp4">打开夹爪/动作原语视频</a></p>
+          </div>
+        </div>
+
+        <div class="evidence-card">
+          <div class="visual-strip">
+            <figure>
+              <img src="assets/x2_visual_rgb.png" alt="X2 chest camera RGB frame" />
+              <figcaption>RGB 输入</figcaption>
+            </figure>
+            <figure>
+              <img src="assets/x2_visual_detection_overlay.png" alt="OWL-ViT detection overlay" />
+              <figcaption>目标检测框</figcaption>
+            </figure>
+            <figure>
+              <img src="assets/x2_visual_sam2_mask_overlay.png" alt="SAM2 mask overlay" />
+              <figcaption>SAM2 mask overlay</figcaption>
+            </figure>
+          </div>
+          <div>
+            <span class="video-label">实验 2 · RGB-D 视觉 primitive 链路</span>
+            <h3>从视觉输入到抓取位姿</h3>
+            <p>该实验重点展示视觉链路的中间结果：先由相机 RGB-D 输入定位目标，再通过检测和分割得到目标区域，随后利用深度点云估计物体/桌面障碍物，并把 Contact-GraspNet 产生的 TCP 抓取位姿接入动作原语。</p>
             <ul class="caption-list">
               <li>OWL-ViT / SAM2 找到目标并分割。</li>
               <li>RGB-D 点云估计目标和桌面障碍物。</li>
               <li>Contact-GraspNet 生成抓取 TCP 位姿并接入动作链路。</li>
             </ul>
-            <div class="video-message">讲解重点：这里展示的是视觉 primitive 和动作 primitive 已经自然串联。</div>
-            <a href="assets/x2_rgbd_codex_a.mp4">打开 RGB-D non-oracle 视频</a>
-          </figcaption>
-        </figure>
-        <figure>
+            <p><a href="assets/x2_rgbd_codex_a.mp4">打开 RGB-D non-oracle 完整任务视频</a></p>
+          </div>
+        </div>
+
+        <div class="evidence-card">
           <video controls preload="metadata" poster="assets/x2_aspire_validation.jpg">
             <source src="assets/x2_aspire_validation.mp4" type="video/mp4" />
           </video>
-          <figcaption>
-            <span class="video-label">视频 3 · ASPIRE-lite 验证</span>
-            <strong>修复 place 阶段不稳定后的 validation</strong>
+          <div>
+            <span class="video-label">实验 3 · ASPIRE-lite 修复策略验证</span>
+            <h3>不同 seed 下的修复策略验证</h3>
+            <p>该实验来自 `place_skip_redundant_prepose_3seed_20260701`。三个 validation seed 的目标方块位置和干扰物位置均有扰动，验证的是修复后的动作策略在小范围布局变化下是否仍能完成任务。</p>
             <ul class="caption-list">
               <li>trace 发现 place-pre 已到位后重复 IK move 会造成跳变。</li>
               <li>修复为到位检测 + post-lift TCP orientation。</li>
-              <li>最终 3 个 validation seed 全部成功。</li>
+              <li>最终 3 个 validation seed 全部成功，平均抓取前 TCP 误差 1.27 cm，平均放置误差 2.15 cm。</li>
             </ul>
-            <div class="video-message">讲解重点：ASPIRE-lite 的价值在于失败可诊断、策略可比较，而不是又多一个相同 demo。</div>
-            <a href="assets/x2_aspire_validation.mp4">打开 validation 视频</a>
-          </figcaption>
-        </figure>
+            <table class="seed-table">
+              <thead>
+                <tr>
+                  <th>seed</th>
+                  <th>目标方块位置 [x,y,z]</th>
+                  <th>干扰物位置 [x,y,z]</th>
+                  <th>结果</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>val_nominal_shift</td>
+                  <td>[0.318, -0.078, 0.921]</td>
+                  <td>[0.225, 0.035, 0.921]</td>
+                  <td>成功</td>
+                </tr>
+                <tr>
+                  <td>val_centered</td>
+                  <td>[0.305, -0.065, 0.921]</td>
+                  <td>[0.225, 0.045, 0.921]</td>
+                  <td>成功</td>
+                </tr>
+                <tr>
+                  <td>val_right_shift</td>
+                  <td>[0.342, -0.083, 0.921]</td>
+                  <td>[0.225, 0.025, 0.921]</td>
+                  <td>成功</td>
+                </tr>
+              </tbody>
+            </table>
+            <p><a href="assets/x2_aspire_validation.mp4">打开其中一个 validation 视频</a></p>
+          </div>
+        </div>
       </div>
       <div class="callout">
-        <strong>现场建议：</strong>先播放第二个 RGB-D non-oracle 视频，再播放第三个 validation 视频。第一个视频用来说明 CaP-X primitive 接入已经成立。
+        <strong>汇报顺序：</strong>先展示实验 2 的三张视觉中间结果，再短播 RGB-D 完整任务视频；实验 3 重点说明 seed 表和指标，视频作为运行记录。
       </div>
     </section>
 
     <section>
-      <h2>ASPIRE 之后，我加了什么</h2>
+      <h2>ASPIRE-lite 扩展</h2>
       <div class="grid two">
         <div class="card">
           <h3>Trace-first 调试</h3>
@@ -684,7 +791,7 @@
         </div>
         <div class="card">
           <h3>候选策略搜索</h3>
-          <p>不是随意改底层代码，而是在高层 primitive 参数上搜索：候选 grasp、TCP offset、reobserve、place descent、place orientation。</p>
+          <p>候选策略搜索约束在高层 primitive 参数内，包括 grasp candidate、TCP offset、reobserve、place descent 和 place orientation。</p>
         </div>
         <div class="card">
           <h3>已验证的修复</h3>
@@ -718,7 +825,7 @@
           <tr>
             <td>严格 ASPIRE 复现状态</td>
             <td>部分完成</td>
-            <td>已实现 trace / failure / candidate / validation 骨架，但还不是完整论文级自动技能发现闭环。</td>
+            <td>已实现 trace / failure / candidate / validation 骨架；完整论文级自动技能发现闭环仍属于后续工作。</td>
           </tr>
         </tbody>
       </table>
@@ -745,7 +852,7 @@
         </div>
         <div class="card">
           <h3>调试价值</h3>
-          <p>ASPIRE-lite 让失败可追踪、可分类、可对比，而不是只依赖人工看视频。</p>
+          <p>ASPIRE-lite 提供失败追踪、失败分类和策略对比能力，降低只依赖人工查看视频的调试成本。</p>
         </div>
         <div class="card">
           <h3>后续价值</h3>
