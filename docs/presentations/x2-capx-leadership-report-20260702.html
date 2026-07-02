@@ -303,22 +303,211 @@
         color: var(--ink);
       }
     }
+
+    /* Leadership report style overrides: quieter, denser, evidence-first. */
+    :root {
+      --ink: #111827;
+      --muted: #667085;
+      --line: #e5e7eb;
+      --panel: #f9fafb;
+      --accent: #155e75;
+      --accent-2: #92400e;
+      --ok: #166534;
+      --bg: #ffffff;
+    }
+    body {
+      background: #f3f4f6;
+      font-size: 16px;
+    }
+    .hero {
+      min-height: auto;
+      display: block;
+      padding: 46px 6vw 32px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.8fr);
+      gap: 34px;
+      align-items: end;
+    }
+    .eyebrow {
+      margin-bottom: 12px;
+      color: #475569;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    h1 {
+      max-width: none;
+      font-size: clamp(34px, 5vw, 52px);
+      line-height: 1.08;
+    }
+    .subtitle {
+      max-width: 760px;
+      margin-top: 18px;
+      color: #334155;
+      font-size: 19px;
+    }
+    .meta {
+      margin-top: 22px;
+      gap: 8px;
+    }
+    .tag {
+      background: #f8fafc;
+      padding: 6px 10px;
+      border-radius: 6px;
+      color: #475569;
+      font-size: 13px;
+    }
+    .hero-panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 18px;
+    }
+    .hero-panel h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+    }
+    .hero-panel p {
+      margin: 8px 0;
+      color: #475569;
+      font-size: 14px;
+    }
+    main {
+      padding: 0 6vw 56px;
+    }
+    section {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 44px 0;
+      border-bottom: 1px solid #dfe3ea;
+    }
+    h2 {
+      margin-bottom: 16px;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.18;
+    }
+    h3 {
+      font-size: 18px;
+    }
+    .lead {
+      max-width: 900px;
+      color: #334155;
+      font-size: 18px;
+    }
+    .card,
+    .flow div,
+    figure {
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: none;
+    }
+    .card {
+      padding: 18px;
+    }
+    .metric {
+      font-size: 30px;
+    }
+    .step {
+      background: #ffffff;
+      border-left-color: #155e75;
+      padding: 16px 18px;
+    }
+    .phase {
+      font-size: 14px;
+    }
+    pre {
+      background: #111827;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .video-intro {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 0.46fr);
+      gap: 18px;
+      align-items: start;
+      margin: 18px 0 24px;
+    }
+    .video-intro .card {
+      min-height: 100%;
+    }
+    .video-intro ul {
+      margin-top: 6px;
+    }
+    .video-label {
+      display: inline-flex;
+      margin-bottom: 8px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #e0f2fe;
+      color: #075985;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .caption-list {
+      margin: 10px 0 0;
+      padding-left: 18px;
+      color: #475569;
+      font-size: 14px;
+    }
+    .caption-list li {
+      margin: 4px 0;
+    }
+    .video-message {
+      margin-top: 10px;
+      color: #334155;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .callout {
+      background: #fffbeb;
+      border-left-color: #d97706;
+      padding: 16px 18px;
+    }
+    @media (max-width: 920px) {
+      .hero-inner,
+      .video-intro {
+        grid-template-columns: 1fr;
+      }
+      .hero {
+        padding: 34px 22px 26px;
+      }
+      main {
+        padding: 0 22px 44px;
+      }
+      section {
+        padding: 36px 0;
+      }
+    }
   </style>
 </head>
 <body>
   <header class="hero">
     <div class="hero-inner">
-      <p class="eyebrow">X2 接入 CaP-X / BEHAVIOR 工作汇报</p>
-      <h1>从环境适配到视觉抓取闭环</h1>
-      <p class="subtitle">
-        目标不是单个 demo，而是让自研 X2 机器人在 5090 + Isaac Sim 5.1 + BEHAVIOR 环境下进入 CaP-X 的任务生成、视觉原语、动作原语和调试闭环。
-      </p>
-      <div class="meta">
-        <span class="tag">BEHAVIOR Isaac Sim 5.1 适配</span>
-        <span class="tag">X2 + 85 型欠驱动夹爪</span>
-        <span class="tag">CaP-X-b1k</span>
-        <span class="tag">RGB-D visual pick-place</span>
-        <span class="tag">ASPIRE-lite trace/candidate loop</span>
+      <div>
+        <p class="eyebrow">X2 接入 CaP-X / BEHAVIOR 工作汇报 · 2026-07-02</p>
+        <h1>从 5090 仿真环境适配到 X2 视觉抓取闭环</h1>
+        <p class="subtitle">
+          这项工作的核心不是单个抓取视频，而是把自研 X2 机器人接入 BEHAVIOR/CaP-X 的任务体系，并形成可继续迁移到实物的视觉、动作和调试闭环。
+        </p>
+        <div class="meta">
+          <span class="tag">Isaac Sim 5.1 / BEHAVIOR</span>
+          <span class="tag">X2 + 85 型欠驱动夹爪</span>
+          <span class="tag">CaP-X-b1k</span>
+          <span class="tag">RGB-D visual pick-place</span>
+          <span class="tag">ASPIRE-lite trace/candidate loop</span>
+        </div>
+      </div>
+      <div class="hero-panel">
+        <h2>当前状态</h2>
+        <p><strong>平台：</strong>5090 上的 BEHAVIOR / Isaac Sim 5.1 可用，自定义机器人导入链路已修复。</p>
+        <p><strong>机器人：</strong>X2 已注册带爪版本，具备桌面 pick-place 基础能力。</p>
+        <p><strong>CaP-X：</strong>LLM 通过任务级 primitive 调用 X2，不直接处理 env setup。</p>
+        <p><strong>验证：</strong>RGB-D / ASPIRE-lite validation 3/3 通过。</p>
       </div>
     </div>
   </header>
@@ -411,13 +600,36 @@
 
     <section>
       <h2>已经能展示的视频证据</h2>
+      <div class="video-intro">
+        <div class="card">
+          <h3>为什么三个视频画面相似</h3>
+          <p>三个视频都是同一个桌面 pick-place 场景，所以画面上都像“机械臂抓方块”。它们真正展示的是不同层级的工程闭环。</p>
+          <ul>
+            <li>第一个看 CaP-X 任务注入是否成立：LLM/任务代码只调用高层 primitive。</li>
+            <li>第二个看视觉链路是否成立：目标选择、分割、RGB-D 障碍物、抓取位姿接入动作。</li>
+            <li>第三个看 ASPIRE-lite 是否有用：通过 trace/candidate 发现并修复 place 阶段不稳定。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>现场播放建议</h3>
+          <p>不要连续完整播放三个视频。建议每个视频只播放 10-20 秒，同时讲清楚“这一段证明的是哪一层能力”。</p>
+          <p>主视频用 RGB-D non-oracle；ASPIRE-lite 视频作为“修复后 validation”证据。</p>
+        </div>
+      </div>
       <div class="media-grid">
         <figure>
           <video controls preload="metadata" poster="assets/x2_two_target_codex_a.jpg">
             <source src="assets/x2_two_target_codex_a.mp4" type="video/mp4" />
           </video>
           <figcaption>
-            <strong>CaP-X 高层 primitive 完成目标选择</strong>
+            <span class="video-label">视频 1 · CaP-X 接入</span>
+            <strong>高层 primitive 可以驱动 X2 完成任务</strong>
+            <ul class="caption-list">
+              <li>证明 X2 已经进入 CaP-X 任务体系。</li>
+              <li>任务 setup 在 config/env 层，不由生成代码手动搭场景。</li>
+              <li>LLM 侧只需要调用目标 primitive。</li>
+            </ul>
+            <div class="video-message">讲解重点：这不是手写仿真脚本，而是 CaP-X 风格的注入式任务执行。</div>
             <a href="assets/x2_two_target_codex_a.mp4">打开 two-target non-oracle 视频</a>
           </figcaption>
         </figure>
@@ -426,7 +638,14 @@
             <source src="assets/x2_rgbd_codex_a.mp4" type="video/mp4" />
           </video>
           <figcaption>
+            <span class="video-label">视频 2 · 视觉动作闭环</span>
             <strong>RGB-D visual route 完成蓝色方块抓取放置</strong>
+            <ul class="caption-list">
+              <li>OWL-ViT / SAM2 找到目标并分割。</li>
+              <li>RGB-D 点云估计目标和桌面障碍物。</li>
+              <li>Contact-GraspNet 生成抓取 TCP 位姿并接入动作链路。</li>
+            </ul>
+            <div class="video-message">讲解重点：这里展示的是视觉 primitive 和动作 primitive 已经自然串联。</div>
             <a href="assets/x2_rgbd_codex_a.mp4">打开 RGB-D non-oracle 视频</a>
           </figcaption>
         </figure>
@@ -435,7 +654,14 @@
             <source src="assets/x2_aspire_validation.mp4" type="video/mp4" />
           </video>
           <figcaption>
-            <strong>ASPIRE-lite 修复策略 3-seed validation</strong>
+            <span class="video-label">视频 3 · ASPIRE-lite 验证</span>
+            <strong>修复 place 阶段不稳定后的 validation</strong>
+            <ul class="caption-list">
+              <li>trace 发现 place-pre 已到位后重复 IK move 会造成跳变。</li>
+              <li>修复为到位检测 + post-lift TCP orientation。</li>
+              <li>最终 3 个 validation seed 全部成功。</li>
+            </ul>
+            <div class="video-message">讲解重点：ASPIRE-lite 的价值在于失败可诊断、策略可比较，而不是又多一个相同 demo。</div>
             <a href="assets/x2_aspire_validation.mp4">打开 validation 视频</a>
           </figcaption>
         </figure>
