@@ -525,6 +525,47 @@
     .seed-table td {
       padding: 8px 8px;
     }
+    .pose-table {
+      margin: 12px 0 14px;
+      font-size: 13px;
+    }
+    .pose-table th,
+    .pose-table td {
+      padding: 8px;
+    }
+    .inline-video {
+      margin-top: 12px;
+    }
+    .seed-videos {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .seed-videos figure {
+      border: 0;
+      background: transparent;
+    }
+    .seed-videos video {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #000;
+    }
+    .seed-videos figcaption {
+      padding: 8px 2px 0;
+      font-size: 12px;
+      color: #475569;
+    }
+    .process-list {
+      margin: 14px 0 0;
+      padding-left: 20px;
+      color: #475569;
+    }
+    .process-list li {
+      margin: 6px 0;
+    }
     .callout {
       background: #fffbeb;
       border-left-color: #d97706;
@@ -534,7 +575,8 @@
       .hero-inner,
       .video-intro,
       .evidence-card,
-      .visual-strip {
+      .visual-strip,
+      .seed-videos {
         grid-template-columns: 1fr;
       }
       .hero {
@@ -554,16 +596,17 @@
     <div class="hero-inner">
       <div>
         <p class="eyebrow">X2 接入 CaP-X / BEHAVIOR 工作汇报 · 2026-07-02</p>
-        <h1>从 5090 仿真环境适配到 X2 视觉抓取闭环</h1>
+        <h1>面向数据自进化的 X2-CaP-X 技能体系</h1>
         <p class="subtitle">
-          本阶段完成 X2 在 BEHAVIOR/CaP-X 任务体系中的接入，覆盖仿真环境、机器人模型、夹爪执行、视觉抓取、动作控制和运行诊断。
+          本阶段以 CaP-X 为基础，完成 X2 在 BEHAVIOR/Isaac Sim 5.1 中的任务接入，并构建面向 ASPIRE-like skill 检索、候选验证和失败修复的数据闭环。
         </p>
         <div class="meta">
           <span class="tag">Isaac Sim 5.1 / BEHAVIOR</span>
           <span class="tag">X2 + 85 型欠驱动夹爪</span>
           <span class="tag">CaP-X-b1k</span>
-          <span class="tag">RGB-D visual pick-place</span>
-          <span class="tag">ASPIRE-lite trace/candidate loop</span>
+          <span class="tag">RGB-D visual primitive</span>
+          <span class="tag">Skill retrieval / candidate validation</span>
+          <span class="tag">ASPIRE-lite trace loop</span>
         </div>
       </div>
       <div class="hero-panel">
@@ -571,7 +614,7 @@
         <p><strong>平台：</strong>5090 上的 BEHAVIOR / Isaac Sim 5.1 可用，自定义机器人导入链路已修复。</p>
         <p><strong>机器人：</strong>X2 已注册带爪版本，具备桌面 pick-place 基础能力。</p>
         <p><strong>CaP-X：</strong>LLM 通过任务级 primitive 调用 X2，不直接处理 env setup。</p>
-        <p><strong>验证：</strong>RGB-D / ASPIRE-lite validation 3/3 通过。</p>
+        <p><strong>验证：</strong>RGB-D 视觉抓取与 ASPIRE-lite validation 3/3 通过。</p>
       </div>
     </div>
   </header>
@@ -580,20 +623,20 @@
     <section>
       <h2>总体进展</h2>
       <p class="lead">
-        X2 已从模型加载阶段推进到可由 CaP-X 高层 primitive 调用并完成桌面 pick-place 任务的阶段；同时保留面向实物部署的 x2-agent-lab 路线，并在 CaP-X 侧加入 ASPIRE-like 的 trace、失败分类和候选策略验证能力。
+        X2 已从模型加载推进到可由 CaP-X 高层 primitive 调用并完成桌面 pick-place 任务的阶段。更重要的是，当前工程已经开始从“单次任务跑通”转向“可记录、可诊断、可检索、可修复”的 skill 数据闭环：每次运行都会沉淀视觉产物、抓取候选、动作轨迹、误差指标、视频和失败分类，为后续 ASPIRE-like 的 skill 扩展提供基础。
       </p>
       <div class="grid">
         <div class="card">
           <div class="metric">3/3</div>
-          <div class="metric-label">最新 RGB-D / ASPIRE-lite validation 成功数</div>
+          <div class="metric-label">最终 ASPIRE-lite validation 成功数</div>
         </div>
         <div class="card">
           <div class="metric">1.27 cm</div>
-          <div class="metric-label">平均抓取前 TCP 位置误差</div>
+          <div class="metric-label">最终验证平均抓取前 TCP 位置误差</div>
         </div>
         <div class="card">
           <div class="metric">2.15 cm</div>
-          <div class="metric-label">平均放置误差</div>
+          <div class="metric-label">最终验证平均放置误差</div>
         </div>
       </div>
     </section>
@@ -627,7 +670,7 @@
           <div class="phase">阶段 4</div>
           <div>
             <h3>形成 CaP-X-b1k 工程分支</h3>
-            <p>在适配后的 BEHAVIOR 基础上，修改 CaP-X，使任务 setup 留在 config/env 层，LLM 代码只调用高层 X2 primitive。</p>
+            <p>在适配后的 BEHAVIOR 基础上，修改 CaP-X，使任务 setup 留在 config/env 层，LLM 代码调用高层 X2 primitive。</p>
             <p>当前仓库：<code>https://github.com/programessi/CaP-X-b1k.git</code></p>
           </div>
         </div>
@@ -638,20 +681,27 @@
             <p>吸收 CaP-X 主线思路，配套形成 x2-agent-lab，用于后续 ROS/实物部署。仿真任务和实物部署分开推进，避免相互污染。</p>
           </div>
         </div>
+        <div class="step">
+          <div class="phase">阶段 6</div>
+          <div>
+            <h3>引入 ASPIRE-like 的数据闭环</h3>
+            <p>在任务可执行之后，加入 trace bundle、失败分类、候选策略配置和 validation seed。当前实现属于 ASPIRE-lite：保留 ASPIRE 的“记录执行轨迹、检索/比较候选技能、根据失败修复策略、再验证”的工程骨架，尚未声明为论文完整复现。</p>
+          </div>
+        </div>
       </div>
     </section>
 
     <section>
-      <h2>当前 CaP-X 任务闭环</h2>
+      <h2>当前 CaP-X 任务与数据闭环</h2>
       <p class="lead">
-        任务代码不再负责创建场景、重置仿真、手动搭机器人或直接调 IK/相机服务。CaP-X 注入给 LLM 的是少量任务级函数。
+        任务代码负责调用高层 primitive，场景搭建、机器人初始化、视觉链路和动作执行由环境与 X2 API 承载。运行结果进一步写入 trace bundle，用于后续 skill 检索、候选策略比较和失败修复。
       </p>
       <div class="flow">
         <div>任务配置<span>BEHAVIOR 场景、X2、桌面、物体、目标点</span></div>
         <div>LLM primitive<span><code>pick_and_place_visual_object(...)</code></span></div>
         <div>视觉链路<span>OWL-ViT / SAM2 / RGB-D / Contact-GraspNet</span></div>
         <div>动作链路<span>TCP grasp pose / PyRoKi / joint IK / gripper</span></div>
-        <div>证据输出<span>视频、metrics、trace、failure report</span></div>
+        <div>数据沉淀<span>视频、metrics、trace、failure report、candidate report</span></div>
       </div>
       <pre>RESULT = pick_and_place_visual_object(
     object_name="blue cube",
@@ -667,16 +717,16 @@
       <div class="video-intro">
         <div class="card">
           <h3>验证组织</h3>
-          <p>本页将验证材料按工程能力拆分，分别对应机器人接入、视觉链路和 ASPIRE-lite 调试验证。视频作为运行记录，视觉中间结果和指标作为主要解释依据。</p>
+          <p>本页将验证材料按工程能力拆分，分别对应机器人接入、视觉链路和 ASPIRE-lite 策略验证。视频作为运行记录，视觉中间结果、抓取位姿和误差指标作为主要解释依据。</p>
           <ul>
             <li>实验 1 展示 X2 导入夹爪后，机械臂和夹爪低级动作可以执行。</li>
-            <li>实验 2 展示视觉 primitive 的中间产物，不只展示最终抓取视频。</li>
-            <li>实验 3 展示不同 seed 下目标/干扰物位置变化，以及修复策略的验证指标。</li>
+            <li>实验 2 展示视觉 primitive 的中间产物、抓取 TCP 位姿记录和机器人执行视频。</li>
+            <li>实验 3 展示不同 seed 下目标/干扰物位置变化、三条验证视频，以及修复策略带来的成功率提升。</li>
           </ul>
         </div>
         <div class="card">
           <h3>验证范围</h3>
-          <p>验证覆盖模型导入、夹爪执行、视觉感知、动作执行和失败诊断。实验三的三个 seed 使用不同的目标方块位置和干扰物位置。</p>
+          <p>验证覆盖模型导入、夹爪执行、视觉感知、动作执行和失败诊断。实验三的三个 seed 使用不同的目标方块位置和干扰物位置，验证策略对小范围布局变化的鲁棒性。</p>
         </div>
       </div>
 
@@ -722,22 +772,67 @@
               <li>RGB-D 点云估计目标和桌面障碍物。</li>
               <li>Contact-GraspNet 生成抓取 TCP 位姿并接入动作链路。</li>
             </ul>
+            <table class="pose-table">
+              <tbody>
+                <tr>
+                  <th>位姿参考系</th>
+                  <td><code>T_world_tcp</code>，视觉输出和动作 primitive 输入保持同一坐标契约。</td>
+                </tr>
+                <tr>
+                  <th>目标估计</th>
+                  <td>基于 SAM2 mask 与 RGB-D 深度估计 <code>T_world_object</code>，中心约为 <code>[0.305, -0.065, 0.921]</code> m。</td>
+                </tr>
+                <tr>
+                  <th>抓取候选</th>
+                  <td>Contact-GraspNet 输出 48 个候选，当前策略选择可达且接近稳定验证姿态的 TCP grasp pose。</td>
+                </tr>
+                <tr>
+                  <th>选中 TCP grasp pose</th>
+                  <td>位置 <code>[0.3068, -0.0656, 0.9240]</code> m；四元数 <code>[0.4899, 0.6940, 0.3302, -0.4114]</code>。</td>
+                </tr>
+                <tr>
+                  <th>闭合前执行误差</th>
+                  <td>TCP 位置误差 <strong>0.0111 m</strong>，姿态误差 <strong>0.0340 rad</strong>。该记录说明闭合夹爪时末端已基本到达视觉生成的抓取位姿。</td>
+                </tr>
+              </tbody>
+            </table>
+            <video class="inline-video" controls preload="metadata" poster="assets/x2_rgbd_codex_a.jpg">
+              <source src="assets/x2_rgbd_codex_a.mp4" type="video/mp4" />
+            </video>
             <p><a href="assets/x2_rgbd_codex_a.mp4">打开 RGB-D non-oracle 完整任务视频</a></p>
           </div>
         </div>
 
         <div class="evidence-card">
-          <video controls preload="metadata" poster="assets/x2_aspire_validation.jpg">
-            <source src="assets/x2_aspire_validation.mp4" type="video/mp4" />
-          </video>
+          <div class="seed-videos">
+            <figure>
+              <video controls preload="metadata">
+                <source src="assets/x2_aspire_val_nominal_shift.mp4" type="video/mp4" />
+              </video>
+              <figcaption>val_nominal_shift</figcaption>
+            </figure>
+            <figure>
+              <video controls preload="metadata">
+                <source src="assets/x2_aspire_val_centered.mp4" type="video/mp4" />
+              </video>
+              <figcaption>val_centered</figcaption>
+            </figure>
+            <figure>
+              <video controls preload="metadata">
+                <source src="assets/x2_aspire_val_right_shift.mp4" type="video/mp4" />
+              </video>
+              <figcaption>val_right_shift</figcaption>
+            </figure>
+          </div>
           <div>
             <span class="video-label">实验 3 · ASPIRE-lite 修复策略验证</span>
             <h3>不同 seed 下的修复策略验证</h3>
-            <p>该实验来自 `place_skip_redundant_prepose_3seed_20260701`。三个 validation seed 的目标方块位置和干扰物位置均有扰动，验证的是修复后的动作策略在小范围布局变化下是否仍能完成任务。</p>
+            <p>该实验来自 <code>place_skip_redundant_prepose_3seed_20260701</code>。三个 validation seed 的目标方块位置和干扰物位置均有扰动，验证的是修复后的动作策略在小范围布局变化下是否仍能完成任务。</p>
             <ul class="caption-list">
               <li>trace 发现 place-pre 已到位后重复 IK move 会造成跳变。</li>
               <li>修复为到位检测 + post-lift TCP orientation。</li>
-              <li>最终 3 个 validation seed 全部成功，平均抓取前 TCP 误差 1.27 cm，平均放置误差 2.15 cm。</li>
+              <li>候选调试阶段出现过 <code>0/1</code>、<code>1/2</code>、<code>2/4</code> 等结果；最终针对 place 失败的修复策略在 3 个 validation seed 上达到 <strong>3/3</strong>。</li>
+              <li>最终平均抓取前 TCP 误差 1.27 cm，平均放置误差 2.15 cm。</li>
             </ul>
             <table class="seed-table">
               <thead>
@@ -769,33 +864,43 @@
                 </tr>
               </tbody>
             </table>
-            <p><a href="assets/x2_aspire_validation.mp4">打开其中一个 validation 视频</a></p>
+            <p><a href="assets/x2_aspire_val_nominal_shift.mp4">打开 seed 1 视频</a> · <a href="assets/x2_aspire_val_centered.mp4">打开 seed 2 视频</a> · <a href="assets/x2_aspire_val_right_shift.mp4">打开 seed 3 视频</a></p>
           </div>
         </div>
       </div>
       <div class="callout">
-        <strong>汇报顺序：</strong>先展示实验 2 的三张视觉中间结果，再短播 RGB-D 完整任务视频；实验 3 重点说明 seed 表和指标，视频作为运行记录。
+        <strong>汇报顺序：</strong>先展示实验 2 的三张视觉中间结果、抓取位姿表和完整执行视频；实验 3 重点说明候选调试到最终 3/3 validation 的过程，再播放三条 seed 视频中的关键片段。
       </div>
     </section>
 
     <section>
       <h2>ASPIRE-lite 扩展</h2>
+      <p class="lead">
+        ASPIRE 的完整实现尚未开源，当前工作采用工程可验证的 ASPIRE-lite 路线：把 CaP-X 任务运行变成可积累的数据资产，再围绕这些数据做 skill 检索、候选参数搜索、失败归因和小规模 validation。它服务于后续“数据自己进化”的目标，并把单次抓取任务扩展为可迭代的技能改进流程。
+      </p>
+      <ol class="process-list">
+        <li>运行任务并保存 trace bundle：生成代码、primitive 调用、视觉截图、mask、抓取候选、运动轨迹、误差指标和视频。</li>
+        <li>将失败归类到可操作的 failure taxonomy，例如检测失败、分割失败、抓取姿态不可达、preclose 未到达、未夹住、place 偏差过大。</li>
+        <li>根据失败类型检索已有 skill 或构造候选策略，候选优先改变高层 primitive 参数，避免反复改底层控制代码。</li>
+        <li>在 debug seed 上比较候选，再把候选中的最优策略放到 validation seed 上验证。</li>
+        <li>把成功策略、失败原因和指标重新写回报告，形成下一轮检索和修复的输入。</li>
+      </ol>
       <div class="grid two">
         <div class="card">
-          <h3>Trace-first 调试</h3>
-          <p>每次运行保存生成代码、primitive 调用、视觉中间结果、抓取候选、运动 waypoint、误差指标、视频和 failure report。</p>
+          <h3>Trace bundle</h3>
+          <p>每次运行保存生成代码、primitive 调用、视觉中间结果、抓取候选、运动 waypoint、误差指标、视频和 failure report。调试对象从“看一段视频”变成“看一份结构化运行记录”。</p>
         </div>
         <div class="card">
-          <h3>失败分类</h3>
+          <h3>Failure taxonomy</h3>
           <p>把失败归因到感知、分割、深度点云、抓取位姿不可达、接近位姿没到、夹取失败、放置误差等类别。</p>
         </div>
         <div class="card">
-          <h3>候选策略搜索</h3>
+          <h3>Skill candidate search</h3>
           <p>候选策略搜索约束在高层 primitive 参数内，包括 grasp candidate、TCP offset、reobserve、place descent 和 place orientation。</p>
         </div>
         <div class="card">
-          <h3>已验证的修复</h3>
-          <p>发现 place-pre 已到位后重复 IK move 会导致末端跳走；修复为到位检测 + 使用 post-lift TCP orientation，3 个 validation seed 全部通过。</p>
+          <h3>Validated repair</h3>
+          <p>发现 place-pre 已到位后重复 IK move 会导致末端跳走；修复为到位检测 + 使用 post-lift TCP orientation。候选调试中存在失败和半成功策略，最终修复策略在 3 个 validation seed 上全部通过。</p>
         </div>
       </div>
       <table>
@@ -813,6 +918,11 @@
             <td>输出目录：<code>outputs/x2_aspire_candidate_search/place_skip_redundant_prepose_3seed_20260701/</code></td>
           </tr>
           <tr>
+            <td>候选搜索过程</td>
+            <td><strong>0/1 -> 1/2、2/4 -> 3/3</strong></td>
+            <td>早期失败候选包括 <code>object_not_in_hand_after_close</code> 和 <code>preclose_pose_not_reached</code>；最终修复针对 place 阶段跳变，验证成功率提升到 3/3。该对比来自受控候选搜索，不作为大样本统计结论。</td>
+          </tr>
+          <tr>
             <td>平均 before-close TCP 误差</td>
             <td><strong>0.0127 m</strong></td>
             <td>说明抓取闭合前末端基本到达视觉生成的抓取位姿。</td>
@@ -825,40 +935,10 @@
           <tr>
             <td>严格 ASPIRE 复现状态</td>
             <td>部分完成</td>
-            <td>已实现 trace / failure / candidate / validation 骨架；完整论文级自动技能发现闭环仍属于后续工作。</td>
+            <td>已实现 trace / failure / skill candidate / validation 骨架；完整论文级自动技能发现闭环仍属于后续工作。</td>
           </tr>
         </tbody>
       </table>
-    </section>
-
-    <section>
-      <h2>目前工作的价值</h2>
-      <div class="grid">
-        <div class="card">
-          <h3>平台价值</h3>
-          <p>把 5090 + Isaac Sim 5.1 + BEHAVIOR 的环境坑补上，并使自定义机器人导入可用。</p>
-        </div>
-        <div class="card">
-          <h3>机器人价值</h3>
-          <p>X2 从模型注册推进到带夹爪、可执行桌面操作任务，并形成仿真/实物两条路线。</p>
-        </div>
-        <div class="card">
-          <h3>CaP-X 价值</h3>
-          <p>LLM 只看高层 primitive，环境和任务由 config 层承载，符合 CaP-X 的代码注入范式。</p>
-        </div>
-        <div class="card">
-          <h3>算法价值</h3>
-          <p>视觉抓取、RGB-D 障碍物估计、无提前碰撞接近、关节 IK 执行已经串成一条闭环。</p>
-        </div>
-        <div class="card">
-          <h3>调试价值</h3>
-          <p>ASPIRE-lite 提供失败追踪、失败分类和策略对比能力，降低只依赖人工查看视频的调试成本。</p>
-        </div>
-        <div class="card">
-          <h3>后续价值</h3>
-          <p>为 2real 做准备：减少 sim truth 依赖，保留 ROS/实物部署工程线。</p>
-        </div>
-      </div>
     </section>
 
     <section>
