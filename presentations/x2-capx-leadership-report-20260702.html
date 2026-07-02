@@ -517,6 +517,21 @@
       font-size: 12px;
       color: #475569;
     }
+    .visual-evidence {
+      grid-template-columns: minmax(360px, 0.95fr) minmax(0, 1.05fr);
+    }
+    .visual-media {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .visual-media .inline-video {
+      margin-top: 4px;
+    }
+    .visual-media .media-link {
+      margin: 0;
+      font-size: 14px;
+    }
     .seed-table {
       margin-top: 14px;
       font-size: 13px;
@@ -538,8 +553,8 @@
     }
     .seed-videos {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: 1fr;
+      gap: 14px;
     }
     .seed-videos figure {
       border: 0;
@@ -557,6 +572,27 @@
       padding: 8px 2px 0;
       font-size: 12px;
       color: #475569;
+    }
+    .aspire-evidence {
+      grid-template-columns: minmax(420px, 0.9fr) minmax(0, 1.1fr);
+    }
+    .aspire-evidence .seed-videos figcaption {
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .aspire-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 22px;
+    }
+    .aspire-grid .card {
+      min-height: 100%;
+    }
+    .comparison-table td:first-child {
+      width: 22%;
+      font-weight: 700;
     }
     .process-list {
       margin: 14px 0 0;
@@ -576,7 +612,8 @@
       .video-intro,
       .evidence-card,
       .visual-strip,
-      .seed-videos {
+      .seed-videos,
+      .aspire-grid {
         grid-template-columns: 1fr;
       }
       .hero {
@@ -748,20 +785,26 @@
           </div>
         </div>
 
-        <div class="evidence-card">
-          <div class="visual-strip">
-            <figure>
-              <img src="assets/x2_visual_rgb.png" alt="X2 chest camera RGB frame" />
-              <figcaption>RGB 输入</figcaption>
-            </figure>
-            <figure>
-              <img src="assets/x2_visual_detection_overlay.png" alt="OWL-ViT detection overlay" />
-              <figcaption>目标检测框</figcaption>
-            </figure>
-            <figure>
-              <img src="assets/x2_visual_sam2_mask_overlay.png" alt="SAM2 mask overlay" />
-              <figcaption>SAM2 mask overlay</figcaption>
-            </figure>
+        <div class="evidence-card visual-evidence">
+          <div class="visual-media">
+            <div class="visual-strip">
+              <figure>
+                <img src="assets/x2_visual_rgb.png" alt="X2 chest camera RGB frame" />
+                <figcaption>RGB 输入</figcaption>
+              </figure>
+              <figure>
+                <img src="assets/x2_visual_detection_overlay.png" alt="OWL-ViT detection overlay" />
+                <figcaption>目标检测框</figcaption>
+              </figure>
+              <figure>
+                <img src="assets/x2_visual_sam2_mask_overlay.png" alt="SAM2 mask overlay" />
+                <figcaption>SAM2 mask overlay</figcaption>
+              </figure>
+            </div>
+            <video class="inline-video" controls preload="metadata" poster="assets/x2_rgbd_codex_a.jpg">
+              <source src="assets/x2_rgbd_codex_a.mp4" type="video/mp4" />
+            </video>
+            <p class="media-link"><a href="assets/x2_rgbd_codex_a.mp4">打开 RGB-D non-oracle 完整任务视频</a></p>
           </div>
           <div>
             <span class="video-label">实验 2 · RGB-D 视觉 primitive 链路</span>
@@ -796,14 +839,10 @@
                 </tr>
               </tbody>
             </table>
-            <video class="inline-video" controls preload="metadata" poster="assets/x2_rgbd_codex_a.jpg">
-              <source src="assets/x2_rgbd_codex_a.mp4" type="video/mp4" />
-            </video>
-            <p><a href="assets/x2_rgbd_codex_a.mp4">打开 RGB-D non-oracle 完整任务视频</a></p>
           </div>
         </div>
 
-        <div class="evidence-card">
+        <div class="evidence-card aspire-evidence">
           <div class="seed-videos">
             <figure>
               <video controls preload="metadata">
@@ -878,6 +917,20 @@
       <p class="lead">
         ASPIRE 的完整实现尚未开源，当前工作采用工程可验证的 ASPIRE-lite 路线：把 CaP-X 任务运行变成可积累的数据资产，再围绕这些数据做 skill 检索、候选参数搜索、失败归因和小规模 validation。它服务于后续“数据自己进化”的目标，并把单次抓取任务扩展为可迭代的技能改进流程。
       </p>
+      <div class="aspire-grid">
+        <div class="card">
+          <h3>已实现的能力</h3>
+          <p>当前实现覆盖 trace bundle、failure taxonomy、skill candidate 配置、candidate search、validation seed、报告聚合和验收审计。每次任务运行会保存视觉产物、抓取候选、动作执行误差、视频和失败报告。</p>
+        </div>
+        <div class="card">
+          <h3>验证方式</h3>
+          <p>先在 debug seed 中运行多个候选策略，记录成功/失败类型，再将选中的修复策略放到 held-out validation seed 上验证。最终报告要求同时具备 trace、视频、误差指标和任务完成信号。</p>
+        </div>
+        <div class="card">
+          <h3>验证效果</h3>
+          <p>候选过程从失败和半成功策略推进到最终 3/3 validation。最终平均抓取前 TCP 误差 1.27 cm，平均放置误差 2.15 cm，三条 seed 均保留视频和 trace。</p>
+        </div>
+      </div>
       <ol class="process-list">
         <li>运行任务并保存 trace bundle：生成代码、primitive 调用、视觉截图、mask、抓取候选、运动轨迹、误差指标和视频。</li>
         <li>将失败归类到可操作的 failure taxonomy，例如检测失败、分割失败、抓取姿态不可达、preclose 未到达、未夹住、place 偏差过大。</li>
@@ -936,6 +989,37 @@
             <td>严格 ASPIRE 复现状态</td>
             <td>部分完成</td>
             <td>已实现 trace / failure / skill candidate / validation 骨架；完整论文级自动技能发现闭环仍属于后续工作。</td>
+          </tr>
+        </tbody>
+      </table>
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th>原 CaP-X 任务执行</th>
+            <th>当前 X2 ASPIRE-lite 扩展</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>技能入口</td>
+            <td>LLM 生成代码调用已有 primitive，重点是完成当前任务。</td>
+            <td>保留高层 primitive 调用，同时把每次调用的参数、结果和失败原因写入可复用记录。</td>
+          </tr>
+          <tr>
+            <td>失败处理</td>
+            <td>失败后主要依赖人工看日志和视频判断原因。</td>
+            <td>失败报告给出 primary failure、suggested repair tags 和相关 trace，便于下一轮检索或构造候选。</td>
+          </tr>
+          <tr>
+            <td>策略改进</td>
+            <td>通常需要人工修改任务代码或 primitive 参数后重新运行。</td>
+            <td>候选策略被结构化成 skill candidate，在 debug seed 和 validation seed 上比较，并沉淀为后续检索对象。</td>
+          </tr>
+          <tr>
+            <td>验证材料</td>
+            <td>以单次任务结果、reward、视频为主。</td>
+            <td>同时保存视觉中间结果、抓取候选、TCP 误差、place 误差、failure taxonomy、candidate report 和多 seed 视频。</td>
           </tr>
         </tbody>
       </table>

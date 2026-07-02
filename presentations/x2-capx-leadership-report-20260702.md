@@ -159,6 +159,54 @@ rgbd_obstacles_sim_truth = False
 - validation seed：将候选策略放到不同目标/干扰物布局下验证。
 - evidence report：把结果写成 `candidate_search_report.json`、`findings.md`、视频和 trace bundle。
 
+### 已实现功能
+
+当前 ASPIRE-lite 不只是保存视频，而是把一次 CaP-X 任务运行拆成可检索的数据记录：
+
+- 运行代码和 primitive 调用参数。
+- RGB、检测框、SAM2 mask、RGB-D 点云估计和 Contact-GraspNet 候选。
+- 抓取前 TCP 误差、姿态误差、place 误差。
+- failure report，包括 `primary_failure` 和 `suggested_repair_tags`。
+- candidate search report，包括 debug seed、validation seed、候选策略得分和最终选择。
+
+### 验证方式
+
+验证流程分三步：
+
+1. 在 debug seed 上运行多个候选策略，故意保留失败和半成功样本。
+2. 根据 failure taxonomy 判断主要失败原因，例如没夹住、preclose 没到、place 阶段跳变。
+3. 将修复后的候选策略放到 held-out validation seed 上运行，并要求同时满足任务完成、误差指标、trace bundle 和视频记录。
+
+### 已验证效果
+
+当前记录到的候选搜索过程：
+
+```text
+controlled_failure_fast_no_reobserve: 0/1
+repair_validated_relaxed_preclose_v2: 1/2
+stable_rgbd_v1: 2/4
+repair_place_keep_lift_orientation_v1: 3/3 validation
+```
+
+最终验证：
+
+```text
+successes = 3/3
+avg_before_close_tcp_error_m = 0.0127 m
+avg_place_error_m = 0.0215 m
+videos = 3
+trace_bundles = 3
+```
+
+### 与原 CaP-X 的差异
+
+原 CaP-X 的重点是让 LLM 在环境中调用 primitive 完成任务。当前扩展保留这一点，但增加了面向 skill 自进化的数据层：
+
+- 原 CaP-X 主要关心一次任务是否完成；当前系统记录任务为什么成功或失败。
+- 原 CaP-X 失败后主要靠人工看视频和日志；当前系统把失败写成 failure taxonomy 和 repair tag。
+- 原 CaP-X 通常需要人工修改代码或参数；当前系统把修改约束成 skill candidate，并在 debug/validation seed 上比较。
+- 原 CaP-X 的证据以 reward、视频为主；当前系统同时保存视觉中间结果、抓取候选、TCP 误差、place 误差、candidate report 和多 seed 视频。
+
 完整 ASPIRE 论文级自动技能发现闭环仍属于后续工作；当前阶段完成的是可复现实验骨架和工程证据链。
 
 ## 后续工作
