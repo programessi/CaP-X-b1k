@@ -74,6 +74,7 @@ docs/presentations/assets/x2_gripper_motion_primitives.mp4
 docs/presentations/assets/x2_visual_rgb.png
 docs/presentations/assets/x2_visual_detection_overlay.png
 docs/presentations/assets/x2_visual_sam2_mask_overlay.png
+docs/presentations/assets/x2_grasp_pose_world_frame.png
 docs/presentations/assets/x2_rgbd_codex_a.mp4
 ```
 
@@ -92,6 +93,7 @@ before_close_ori_error_rad = 0.0340 rad
 解释口径：
 
 - 视觉链路不只输出 mask，还输出可接入动作 primitive 的 TCP 抓取位姿。
+- 抓取姿态图由 `grasp_summary.json` 重建，展示 world-frame 下的 object bbox、precontact TCP、grasp TCP、TCP 三轴和 approach axis。由于当次运行没有保存相机内参/外参，该图不是 RGB 图像投影。
 - 机器人闭合夹爪前的 TCP 误差约 1.1 cm，说明动作执行基本到达视觉生成的抓取位姿。
 - RGB-D route 已经减少早期 oracle obstacle route 的仿真真值依赖，但 reward、task_completed、place_error 等评估信号仍来自仿真。
 
@@ -155,6 +157,7 @@ rgbd_obstacles_sim_truth = False
 
 - trace bundle：保存生成代码、primitive 调用、视觉产物、抓取候选、运动 waypoint、误差指标、视频。
 - failure taxonomy：将失败归类到检测、分割、深度点云、抓取不可达、preclose 未到达、未夹住、放置误差等类别。
+- LLM candidate proposer：读取历史 `candidate_search_report.json`、failure taxonomy 和 skill library，让 LLM 只生成白名单参数内的候选策略。
 - skill candidate search：围绕高层 primitive 参数搜索候选策略，包括 grasp candidate、TCP offset、reobserve、place descent、place orientation。
 - validation seed：将候选策略放到不同目标/干扰物布局下验证。
 - evidence report：把结果写成 `candidate_search_report.json`、`findings.md`、视频和 trace bundle。
@@ -168,14 +171,17 @@ rgbd_obstacles_sim_truth = False
 - 抓取前 TCP 误差、姿态误差、place 误差。
 - failure report，包括 `primary_failure` 和 `suggested_repair_tags`。
 - candidate search report，包括 debug seed、validation seed、候选策略得分和最终选择。
+- LLM proposal，包括 prompt、raw response、validated `candidates.json`。
 
 ### 验证方式
 
 验证流程分三步：
 
-1. 在 debug seed 上运行多个候选策略，故意保留失败和半成功样本。
-2. 根据 failure taxonomy 判断主要失败原因，例如没夹住、preclose 没到、place 阶段跳变。
-3. 将修复后的候选策略放到 held-out validation seed 上运行，并要求同时满足任务完成、误差指标、trace bundle 和视频记录。
+1. 从历史 report 中抽取失败类型、指标和已有 skill evidence。
+2. 由 LLM 生成参数级 candidate，候选只能使用白名单参数，不能改底层控制代码。
+3. 在 debug seed 上运行多个候选策略，故意保留失败和半成功样本。
+4. 根据 failure taxonomy 判断主要失败原因，例如没夹住、preclose 没到、place 阶段跳变。
+5. 将修复后的候选策略放到 held-out validation seed 上运行，并要求同时满足任务完成、误差指标、trace bundle 和视频记录。
 
 ### 已验证效果
 
@@ -197,6 +203,28 @@ avg_place_error_m = 0.0215 m
 videos = 3
 trace_bundles = 3
 ```
+
+新增 LLM 自动候选生成的 plan-only 验证：
+
+```text
+script:
+  scripts/propose_x2_aspire_skill_candidates.py
+  scripts/run_x2_aspire_llm_skill_evolution.py
+
+input report:
+  outputs/x2_aspire_candidate_search/aggregate_existing_20260701_after_validation/candidate_search_report.json
+
+Codex CLI generated candidates:
+  llm_retry_reachable_grasps
+  llm_slow_preclose_align
+  llm_conservative_reobserve_slack
+
+candidate-search plan:
+  3 debug seeds
+  3 validation seeds
+```
+
+真实 execute 还需要先启动 PyRoKi、Contact-GraspNet、OWL-ViT、SAM2 等服务；当前检查时这些服务未在本机端口上运行，因此本轮只完成了 LLM proposal 和 candidate-search plan 验证。
 
 ### 与原 CaP-X 的差异
 

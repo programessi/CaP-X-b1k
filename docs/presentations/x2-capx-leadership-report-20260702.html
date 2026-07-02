@@ -499,7 +499,7 @@
     }
     .visual-strip {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
     }
     .visual-strip figure {
@@ -511,6 +511,10 @@
       aspect-ratio: 1 / 1;
       object-fit: cover;
       background: #f8fafc;
+    }
+    .visual-strip .pose-figure img {
+      object-fit: contain;
+      background: #ffffff;
     }
     .visual-strip figcaption {
       padding: 8px 2px 0;
@@ -800,6 +804,10 @@
                 <img src="assets/x2_visual_sam2_mask_overlay.png" alt="SAM2 mask overlay" />
                 <figcaption>SAM2 mask overlay</figcaption>
               </figure>
+              <figure class="pose-figure">
+                <img src="assets/x2_grasp_pose_world_frame.png" alt="World-frame TCP grasp pose visualization" />
+                <figcaption>抓取 TCP 位姿</figcaption>
+              </figure>
             </div>
             <video class="inline-video" controls preload="metadata" poster="assets/x2_rgbd_codex_a.jpg">
               <source src="assets/x2_rgbd_codex_a.mp4" type="video/mp4" />
@@ -809,11 +817,11 @@
           <div>
             <span class="video-label">实验 2 · RGB-D 视觉 primitive 链路</span>
             <h3>从视觉输入到抓取位姿</h3>
-            <p>该实验重点展示视觉链路的中间结果：先由相机 RGB-D 输入定位目标，再通过检测和分割得到目标区域，随后利用深度点云估计物体/桌面障碍物，并把 Contact-GraspNet 产生的 TCP 抓取位姿接入动作原语。</p>
+            <p>该实验重点展示视觉链路的中间结果：先由相机 RGB-D 输入定位目标，再通过检测和分割得到目标区域，随后利用深度点云估计物体/桌面障碍物，并把 Contact-GraspNet 产生的 TCP 抓取位姿接入动作原语。抓取姿态图由当次 <code>grasp_summary.json</code> 记录重建，展示的是 world-frame 下的 TCP frame。</p>
             <ul class="caption-list">
               <li>OWL-ViT / SAM2 找到目标并分割。</li>
               <li>RGB-D 点云估计目标和桌面障碍物。</li>
-              <li>Contact-GraspNet 生成抓取 TCP 位姿并接入动作链路。</li>
+              <li>Contact-GraspNet 生成抓取 TCP 位姿，并记录 precontact pose、grasp pose 和 approach axis。</li>
             </ul>
             <table class="pose-table">
               <tbody>
@@ -920,15 +928,15 @@
       <div class="aspire-grid">
         <div class="card">
           <h3>已实现的能力</h3>
-          <p>当前实现覆盖 trace bundle、failure taxonomy、skill candidate 配置、candidate search、validation seed、报告聚合和验收审计。每次任务运行会保存视觉产物、抓取候选、动作执行误差、视频和失败报告。</p>
+          <p>当前实现覆盖 trace bundle、failure taxonomy、skill candidate 配置、LLM candidate proposer、candidate search、validation seed、报告聚合和验收审计。每次任务运行会保存视觉产物、抓取候选、动作执行误差、视频和失败报告。</p>
         </div>
         <div class="card">
           <h3>验证方式</h3>
-          <p>先在 debug seed 中运行多个候选策略，记录成功/失败类型，再将选中的修复策略放到 held-out validation seed 上验证。最终报告要求同时具备 trace、视频、误差指标和任务完成信号。</p>
+          <p>先由 LLM 根据历史 report 和 skill library 生成受约束候选，再在 debug seed 中比较候选策略，记录成功/失败类型，最后将选中的修复策略放到 held-out validation seed 上验证。</p>
         </div>
         <div class="card">
           <h3>验证效果</h3>
-          <p>候选过程从失败和半成功策略推进到最终 3/3 validation。最终平均抓取前 TCP 误差 1.27 cm，平均放置误差 2.15 cm，三条 seed 均保留视频和 trace。</p>
+          <p>人工候选过程已从失败和半成功策略推进到最终 3/3 validation。新增的 Codex CLI proposer 已能从旧 report 自动生成 3 个参数级候选，并进入 3 debug / 3 validation 的 candidate-search plan。</p>
         </div>
       </div>
       <ol class="process-list">
@@ -989,6 +997,11 @@
             <td>严格 ASPIRE 复现状态</td>
             <td>部分完成</td>
             <td>已实现 trace / failure / skill candidate / validation 骨架；完整论文级自动技能发现闭环仍属于后续工作。</td>
+          </tr>
+          <tr>
+            <td>LLM 自动候选生成</td>
+            <td><strong>plan-only 通过</strong></td>
+            <td><code>scripts/propose_x2_aspire_skill_candidates.py</code> 已用本机 Codex CLI 从历史 report 生成 3 个候选；<code>scripts/run_x2_aspire_llm_skill_evolution.py</code> 可一键串联 propose、candidate search 和 audit。真实仿真 execute 需要先启动 PyRoKi / GraspNet / OWL-ViT / SAM2 服务。</td>
           </tr>
         </tbody>
       </table>

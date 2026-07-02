@@ -1,0 +1,82 @@
+[
+  {
+    "id": "rgbd_tabletop_obstacle_box_planning",
+    "applicable_task": "x2_tabletop_rgbd_pick_place",
+    "when": [
+      "task uses RGB-D tabletop perception",
+      "object and support surface are visible in the camera depth image",
+      "precontact approach should avoid the target object and table before closing"
+    ],
+    "repair": [
+      "estimate the target object box from the SAM2 mask point cloud",
+      "estimate the table support box from non-target RGB-D points below the object",
+      "pass both boxes into PyRoKi collision-aware approach planning",
+      "do not read simulation object or table AABBs for planning"
+    ],
+    "evidence": [
+      "x2-rgbd-non-oracle-v1",
+      "obstacle_source=rgbd_visual",
+      "rgbd_obstacles_sim_truth=False"
+    ]
+  },
+  {
+    "id": "precontact_reobserve_with_quality_gates",
+    "applicable_task": "x2_tabletop_rgbd_pick_place",
+    "when": [
+      "a visual grasp pose is selected before arm motion",
+      "the arm can stop at a stable precontact pose without occluding the object too heavily",
+      "the initial grasp may be shallow or shifted by perception noise"
+    ],
+    "repair": [
+      "move to precontact and settle",
+      "rerun RGB-D detection, segmentation, object pose estimation, and grasp selection once",
+      "adopt the new grasp only if mask pixels, depth points, object shift, grasp shift, precontact shift, and IK reachability pass gates",
+      "fall back to the initial grasp if any quality gate fails"
+    ],
+    "evidence": [
+      "x2-rgbd-non-oracle-v1",
+      "reobserve_adopted=True",
+      "reobserve_reason=quality_gates_passed"
+    ]
+  },
+  {
+    "id": "slow_vertical_place_descent",
+    "applicable_task": "x2_tabletop_pick_place",
+    "when": [
+      "the robot already holds the object",
+      "dragging or lateral motion near the place surface is risky",
+      "the target object-center place point is known"
+    ],
+    "repair": [
+      "transfer above the target at a safe height",
+      "descend mostly vertically through several small waypoints",
+      "use a smaller joint-step limit during final descent",
+      "settle before opening the gripper"
+    ],
+    "evidence": [
+      "x2-rgbd-non-oracle-v1",
+      "place_descent_waypoints=4",
+      "place_error_m=0.019196923124027467"
+    ]
+  },
+  {
+    "id": "try_next_grasp_candidate_when_preclose_unreached",
+    "applicable_task": "x2_tabletop_visual_grasp",
+    "when": [
+      "the visual chain returns multiple adapted GraspNet candidates",
+      "the selected candidate is unreachable, collides early, or does not close on the object",
+      "the object remains visible and the task timeout allows another attempt"
+    ],
+    "repair": [
+      "reuse the same visual/GraspNet sample if still valid",
+      "select the next ranked candidate index",
+      "rerun obstacle-aware approach and preclose checks",
+      "stop once before-close pose is reached and object_in_hand_after_close is true"
+    ],
+    "evidence": [
+      "x2-rgbd-non-oracle-v1",
+      "candidate_indices=(1, 2)",
+      "candidate_index=1"
+    ]
+  }
+]
