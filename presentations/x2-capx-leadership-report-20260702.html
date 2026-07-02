@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>X2 接入 CaP-X/BEHAVIOR 汇报</title>
+  <style>
+    :root {
+      --ink: #17202a;
+      --muted: #5f6b7a;
+      --line: #d7dee8;
+      --panel: #f8fafc;
+      --accent: #0f766e;
+      --accent-2: #b45309;
+      --ok: #15803d;
+      --bg: #ffffff;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.55;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .hero {
+      min-height: 92vh;
+      display: grid;
+      align-items: end;
+      padding: 8vh 6vw 7vh;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0.72) 50%, rgba(255,255,255,0.42)),
+        url("assets/x2_aspire_validation.jpg") center right / cover no-repeat;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-inner {
+      max-width: 980px;
+    }
+    .eyebrow {
+      margin: 0 0 18px;
+      color: var(--accent);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    h1 {
+      max-width: 960px;
+      margin: 0;
+      font-size: clamp(40px, 7vw, 76px);
+      line-height: 1.03;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      max-width: 780px;
+      margin: 28px 0 0;
+      color: #2d3748;
+      font-size: 22px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 30px;
+    }
+    .tag {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.82);
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: #344054;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    main {
+      padding: 0 6vw 80px;
+    }
+    section {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 76px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    section:last-child {
+      border-bottom: 0;
+    }
+    h2 {
+      margin: 0 0 24px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+    h3 {
+      margin: 0 0 10px;
+      font-size: 20px;
+    }
+    p {
+      margin: 0 0 16px;
+    }
+    .lead {
+      max-width: 900px;
+      color: #334155;
+      font-size: 21px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 28px;
+    }
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 22px;
+    }
+    .card strong {
+      color: var(--ink);
+    }
+    .metric {
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--ok);
+      line-height: 1.1;
+    }
+    .metric-label {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+    .timeline {
+      display: grid;
+      gap: 16px;
+      margin-top: 30px;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 18px;
+      align-items: start;
+      border-left: 4px solid var(--accent);
+      background: var(--panel);
+      padding: 18px 20px;
+      border-radius: 0 8px 8px 0;
+    }
+    .step .phase {
+      color: var(--accent);
+      font-weight: 800;
+    }
+    ul {
+      margin: 10px 0 0;
+      padding-left: 22px;
+    }
+    li {
+      margin: 6px 0;
+    }
+    code {
+      border: 1px solid #d8dee8;
+      border-radius: 6px;
+      background: #eef2f7;
+      padding: 2px 6px;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.92em;
+    }
+    pre {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 18px;
+      font-size: 14px;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 28px;
+    }
+    .flow div {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #ffffff;
+      font-weight: 700;
+      min-height: 88px;
+    }
+    .flow span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .media-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px;
+      margin-top: 28px;
+    }
+    figure {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fff;
+    }
+    figure img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+    }
+    figure video {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: #000;
+      object-fit: cover;
+    }
+    figcaption {
+      padding: 14px 16px 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    figcaption strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 4px;
+      font-size: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 24px;
+      font-size: 15px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 12px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: #475569;
+      background: #f1f5f9;
+      font-weight: 800;
+    }
+    .callout {
+      margin-top: 26px;
+      border-left: 4px solid var(--accent-2);
+      background: #fff7ed;
+      padding: 18px 20px;
+      border-radius: 0 8px 8px 0;
+    }
+    .links {
+      display: grid;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .links a {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+    @media (max-width: 880px) {
+      .hero {
+        min-height: auto;
+        padding: 70px 22px 54px;
+      }
+      main {
+        padding: 0 22px 60px;
+      }
+      section {
+        padding: 52px 0;
+      }
+      .grid, .grid.two, .media-grid, .flow {
+        grid-template-columns: 1fr;
+      }
+      .step {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media print {
+      .hero {
+        min-height: 35vh;
+      }
+      section {
+        break-inside: avoid;
+      }
+      a {
+        color: var(--ink);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">X2 接入 CaP-X / BEHAVIOR 工作汇报</p>
+      <h1>从环境适配到视觉抓取闭环</h1>
+      <p class="subtitle">
+        目标不是单个 demo，而是让自研 X2 机器人在 5090 + Isaac Sim 5.1 + BEHAVIOR 环境下进入 CaP-X 的任务生成、视觉原语、动作原语和调试闭环。
+      </p>
+      <div class="meta">
+        <span class="tag">BEHAVIOR Isaac Sim 5.1 适配</span>
+        <span class="tag">X2 + 85 型欠驱动夹爪</span>
+        <span class="tag">CaP-X-b1k</span>
+        <span class="tag">RGB-D visual pick-place</span>
+        <span class="tag">ASPIRE-lite trace/candidate loop</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>一句话结论</h2>
+      <p class="lead">
+        我已经把 X2 从“能被仿真加载”推进到“能被 CaP-X 以高层 primitive 调用并完成桌面 pick-place 任务”的阶段；同时保留了面向实物部署的 x2-agent-lab 路线，并在 CaP-X 侧加入 ASPIRE-like 的 trace、失败分类和候选策略验证能力。
+      </p>
+      <div class="grid">
+        <div class="card">
+          <div class="metric">3/3</div>
+          <div class="metric-label">最新 RGB-D / ASPIRE-lite validation 成功数</div>
+        </div>
+        <div class="card">
+          <div class="metric">1.27 cm</div>
+          <div class="metric-label">平均抓取前 TCP 位置误差</div>
+        </div>
+        <div class="card">
+          <div class="metric">2.15 cm</div>
+          <div class="metric-label">平均放置误差</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>为什么这件事不是直接改 CaP-X 就能完成</h2>
+      <div class="timeline">
+        <div class="step">
+          <div class="phase">阶段 1</div>
+          <div>
+            <h3>5090 环境约束</h3>
+            <p>CaP-X 自带的 third_party BEHAVIOR 与当前 5090 显卡环境不匹配。解决路线改为独立安装官网 BEHAVIOR，并适配 Isaac Sim 5.1。</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="phase">阶段 2</div>
+          <div>
+            <h3>修复 BEHAVIOR 自定义机器人导入链路</h3>
+            <p>独立 BEHAVIOR 配通后，发现该版本自定义机器人导入 pipeline 存在问题。已打补丁修复，并对官方 main 与修改导入后的 main 做烟测。</p>
+            <p>本地补丁提交：<code>0f6705681 Fix custom robot import for Isaac Sim 5.1</code></p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="phase">阶段 3</div>
+          <div>
+            <h3>补齐 X2 的任务执行条件</h3>
+            <p>X2 原始模型不能自然完成抓取任务。参考官方 Franka + 85 型欠驱动夹爪示例，写了 X2 安装夹爪脚本，并注册带爪/不带爪版本。</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="phase">阶段 4</div>
+          <div>
+            <h3>形成 CaP-X-b1k 工程分支</h3>
+            <p>在适配后的 BEHAVIOR 基础上，修改 CaP-X，使任务 setup 留在 config/env 层，LLM 代码只调用高层 X2 primitive。</p>
+            <p>当前仓库：<code>https://github.com/programessi/CaP-X-b1k.git</code></p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="phase">阶段 5</div>
+          <div>
+            <h3>并行沉淀实物路线</h3>
+            <p>吸收 CaP-X 主线思路，配套形成 x2-agent-lab，用于后续 ROS/实物部署。仿真任务和实物部署分开推进，避免相互污染。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>当前 CaP-X 任务闭环</h2>
+      <p class="lead">
+        任务代码不再负责创建场景、重置仿真、手动搭机器人或直接调 IK/相机服务。CaP-X 注入给 LLM 的是少量任务级函数。
+      </p>
+      <div class="flow">
+        <div>任务配置<span>BEHAVIOR 场景、X2、桌面、物体、目标点</span></div>
+        <div>LLM primitive<span><code>pick_and_place_visual_object(...)</code></span></div>
+        <div>视觉链路<span>OWL-ViT / SAM2 / RGB-D / Contact-GraspNet</span></div>
+        <div>动作链路<span>TCP grasp pose / PyRoKi / joint IK / gripper</span></div>
+        <div>证据输出<span>视频、metrics、trace、failure report</span></div>
+      </div>
+      <pre>RESULT = pick_and_place_visual_object(
+    object_name="blue cube",
+    target_name="right target",
+    obstacle_source="rgbd_visual",
+    place_offset_source="visual_grasp_pose",
+    reobserve_at_precontact=True,
+)</pre>
+    </section>
+
+    <section>
+      <h2>已经能展示的视频证据</h2>
+      <div class="media-grid">
+        <figure>
+          <video controls preload="metadata" poster="assets/x2_two_target_codex_a.jpg">
+            <source src="assets/x2_two_target_codex_a.mp4" type="video/mp4" />
+          </video>
+          <figcaption>
+            <strong>CaP-X 高层 primitive 完成目标选择</strong>
+            <a href="assets/x2_two_target_codex_a.mp4">打开 two-target non-oracle 视频</a>
+          </figcaption>
+        </figure>
+        <figure>
+          <video controls preload="metadata" poster="assets/x2_rgbd_codex_a.jpg">
+            <source src="assets/x2_rgbd_codex_a.mp4" type="video/mp4" />
+          </video>
+          <figcaption>
+            <strong>RGB-D visual route 完成蓝色方块抓取放置</strong>
+            <a href="assets/x2_rgbd_codex_a.mp4">打开 RGB-D non-oracle 视频</a>
+          </figcaption>
+        </figure>
+        <figure>
+          <video controls preload="metadata" poster="assets/x2_aspire_validation.jpg">
+            <source src="assets/x2_aspire_validation.mp4" type="video/mp4" />
+          </video>
+          <figcaption>
+            <strong>ASPIRE-lite 修复策略 3-seed validation</strong>
+            <a href="assets/x2_aspire_validation.mp4">打开 validation 视频</a>
+          </figcaption>
+        </figure>
+      </div>
+      <div class="callout">
+        <strong>现场建议：</strong>先播放第二个 RGB-D non-oracle 视频，再播放第三个 validation 视频。第一个视频用来说明 CaP-X primitive 接入已经成立。
+      </div>
+    </section>
+
+    <section>
+      <h2>ASPIRE 之后，我加了什么</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>Trace-first 调试</h3>
+          <p>每次运行保存生成代码、primitive 调用、视觉中间结果、抓取候选、运动 waypoint、误差指标、视频和 failure report。</p>
+        </div>
+        <div class="card">
+          <h3>失败分类</h3>
+          <p>把失败归因到感知、分割、深度点云、抓取位姿不可达、接近位姿没到、夹取失败、放置误差等类别。</p>
+        </div>
+        <div class="card">
+          <h3>候选策略搜索</h3>
+          <p>不是随意改底层代码，而是在高层 primitive 参数上搜索：候选 grasp、TCP offset、reobserve、place descent、place orientation。</p>
+        </div>
+        <div class="card">
+          <h3>已验证的修复</h3>
+          <p>发现 place-pre 已到位后重复 IK move 会导致末端跳走；修复为到位检测 + 使用 post-lift TCP orientation，3 个 validation seed 全部通过。</p>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>验证项</th>
+            <th>结果</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>validation 成功率</td>
+            <td><strong>3/3</strong></td>
+            <td>输出目录：<code>outputs/x2_aspire_candidate_search/place_skip_redundant_prepose_3seed_20260701/</code></td>
+          </tr>
+          <tr>
+            <td>平均 before-close TCP 误差</td>
+            <td><strong>0.0127 m</strong></td>
+            <td>说明抓取闭合前末端基本到达视觉生成的抓取位姿。</td>
+          </tr>
+          <tr>
+            <td>平均放置误差</td>
+            <td><strong>0.0215 m</strong></td>
+            <td>桌面 pick-place 仿真任务可以稳定完成。</td>
+          </tr>
+          <tr>
+            <td>严格 ASPIRE 复现状态</td>
+            <td>部分完成</td>
+            <td>已实现 trace / failure / candidate / validation 骨架，但还不是完整论文级自动技能发现闭环。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>目前工作的价值</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>平台价值</h3>
+          <p>把 5090 + Isaac Sim 5.1 + BEHAVIOR 的环境坑补上，并使自定义机器人导入可用。</p>
+        </div>
+        <div class="card">
+          <h3>机器人价值</h3>
+          <p>X2 从模型注册推进到带夹爪、可执行桌面操作任务，并形成仿真/实物两条路线。</p>
+        </div>
+        <div class="card">
+          <h3>CaP-X 价值</h3>
+          <p>LLM 只看高层 primitive，环境和任务由 config 层承载，符合 CaP-X 的代码注入范式。</p>
+        </div>
+        <div class="card">
+          <h3>算法价值</h3>
+          <p>视觉抓取、RGB-D 障碍物估计、无提前碰撞接近、关节 IK 执行已经串成一条闭环。</p>
+        </div>
+        <div class="card">
+          <h3>调试价值</h3>
+          <p>ASPIRE-lite 让失败可追踪、可分类、可对比，而不是只依赖人工看视频。</p>
+        </div>
+        <div class="card">
+          <h3>后续价值</h3>
+          <p>为 2real 做准备：减少 sim truth 依赖，保留 ROS/实物部署工程线。</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>下一步建议</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>优先级</th>
+            <th>工作</th>
+            <th>验收标准</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>P0</td>
+            <td>固化当前 CaP-X-b1k 稳定版本</td>
+            <td>打 tag，README 指向视频和 metrics，避免后续实验破坏稳定基线。</td>
+          </tr>
+          <tr>
+            <td>P1</td>
+            <td>补齐严格 ASPIRE-style 单报告</td>
+            <td>同一个 report 内包含多候选 debug、controlled failure、best candidate、3-seed validation。</td>
+          </tr>
+          <tr>
+            <td>P1</td>
+            <td>推进 x2-agent-lab 实物桥接</td>
+            <td>完成相机标定、TCP/EEF 标定、ROS action/trajectory 执行接口、安全停止。</td>
+          </tr>
+          <tr>
+            <td>P2</td>
+            <td>增加更多任务</td>
+            <td>从单物体 pick-place 扩展到多目标、多物体、不同摆放位置和更多失败恢复策略。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>关键文件和证据入口</h2>
+      <div class="links">
+        <a href="../x2-capx-integration-status.md">docs/x2-capx-integration-status.md</a>
+        <a href="../x2-aspire-lite-minimal-replication.md">docs/x2-aspire-lite-minimal-replication.md</a>
+        <a href="../x2-rgbd-visual-obstacle-upgrade-20260630.md">docs/x2-rgbd-visual-obstacle-upgrade-20260630.md</a>
+        <a href="https://github.com/programessi/CaP-X-b1k/blob/main/capx/integrations/x2/control.py">capx/integrations/x2/control.py</a>
+        <a href="https://github.com/programessi/CaP-X-b1k/blob/main/capx/integrations/x2/aspire.py">capx/integrations/x2/aspire.py</a>
+        <a href="https://github.com/programessi/CaP-X-b1k/blob/main/scripts/run_x2_aspire_rgbd_candidate_search.py">scripts/run_x2_aspire_rgbd_candidate_search.py</a>
+        <a href="../x2-aspire-lite-minimal-replication.md">ASPIRE-lite report and validation evidence</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
