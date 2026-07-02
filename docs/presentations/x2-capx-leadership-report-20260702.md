@@ -107,38 +107,41 @@ docs/presentations/assets/x2_aspire_val_centered.mp4
 docs/presentations/assets/x2_aspire_val_right_shift.mp4
 ```
 
-三个 validation seed：
+本轮输出：
 
 ```text
-val_nominal_shift:
-  target    = [0.318, -0.078, 0.921]
-  distractor= [0.225,  0.035, 0.921]
-
-val_centered:
-  target    = [0.305, -0.065, 0.921]
-  distractor= [0.225,  0.045, 0.921]
-
-val_right_shift:
-  target    = [0.342, -0.083, 0.921]
-  distractor= [0.225,  0.025, 0.921]
+outputs/x2_aspire_parameter_loop/full_strict_gate_20260702_gpu/
 ```
 
-候选搜索过程中的成功率变化：
+任务设置：
+
+- 同一 RGB-D pick-place 任务使用 3 个 debug seed 和 3 个 held-out validation seed。
+- seed 表示任务实例不同：目标方块、干扰物和目标放置点有小范围扰动，但仍在 X2 右臂可达区域内。
+- baseline 和候选使用同一任务族；validation seed 不参与候选生成和 debug 选择。
+
+候选搜索过程：
 
 ```text
-controlled_failure_fast_no_reobserve: 0/1
-repair_validated_relaxed_preclose_v2: 1/2
-stable_rgbd_v1: 2/4
-repair_place_keep_lift_orientation_v1: 3/3 validation
+controlled_failure_strict_reach_gate baseline:
+  debug success = 1/3
+  failures = preclose_pose_not_reached, preclose_pose_not_reached
+
+LLM-generated candidates:
+  llm_try_more_ranked_grasps:      debug 2/3
+  llm_slow_preclose_align:         debug 3/3
+  llm_enable_guarded_reobserve:    debug 1/3
+
+selected best:
+  llm_slow_preclose_align
 ```
 
 最终验证指标：
 
 ```text
 successes = 3/3
-avg_before_close_tcp_error_m = 0.0127399412
-avg_before_close_ori_error_rad = 0.0420904692
-avg_place_error_m = 0.0215318505
+avg_before_close_tcp_error_m = 0.0026426902
+avg_before_close_ori_error_rad = 0.0072086684
+avg_place_error_m = 0.0284396451
 trace_bundles = 3
 videos = 3
 rgbd_obstacles_sim_truth = False
@@ -147,44 +150,49 @@ rgbd_obstacles_sim_truth = False
 解释口径：
 
 - 该结果属于受控候选搜索中的工程验证，不能等同于大样本统计评测。
-- 早期候选暴露出 `object_not_in_hand_after_close`、`preclose_pose_not_reached`、place 阶段跳变等问题。
-- 最终修复策略使用 `post_lift_current` 作为 place orientation，并在 place-pre 已到位时跳过冗余 IK move。
+- baseline 的两个失败都发生在闭爪前，failure taxonomy 为 `preclose_pose_not_reached`。
+- trace 显示 IK 解算误差接近 0，目标并非明显不可达；失败主要来自执行跟踪和过严的 final reach gate。
+- LLM 根据失败报告生成 3 个受限参数候选。候选只改高层 primitive 白名单参数，不能改底层控制器、视觉模型、IK 或 PyRoKi。
+- 最终修复策略 `llm_slow_preclose_align` 将接近/插入动作放慢，增加 hold 和 fine-align，并放宽 final gate，使末端在可抓容差内稳定闭爪。
+- `llm_enable_guarded_reobserve` 是一个反例：它单独强化 reobserve，但在两个 debug seed 上变成 `object_not_in_hand_after_close`，说明 LLM 建议必须经过执行筛选。
 - 修复后在三个 held-out validation seed 上均完成任务。
 
 ### 参数级 ASPIRE-lite 的作用示例
 
 当前参数级修复的效果是：在不改底层 X2 控制器、不改视觉模型、不改 PyRoKi/IK 实现的前提下，把失败记录转化为高层 primitive 的候选参数，并通过多 seed 执行筛选出更稳定的一组策略。
 
-以 `object_not_in_hand_after_close` 为例，失败 trace 会记录：
+以本轮 baseline 的 `preclose_pose_not_reached` 为例，失败 trace 会记录：
 
 ```text
 before_close_tcp_error_m
 before_close_ori_error_rad
-selected_grasp_candidate
-final_close_axis_offset_m
-object_in_hand_after_close
-task_completed
+preclose_joint_ok
+preclose_joint_final_error_rad
+preclose_ik_solve_fk_pos_error_m
+preclose_ik_solve_fk_ori_error_rad
 ```
 
-如果闭合前 TCP 误差较小但 `object_in_hand_after_close=False`，failure report 会将主失败归类为 `object_not_in_hand_after_close`，并给出类似修复方向：
+如果 IK solve FK 误差很小，但闭合前 TCP / 姿态误差仍超过严格阈值，failure report 会将主失败归类为 `preclose_pose_not_reached`，并给出类似修复方向：
 
 ```text
-increase_grasp_tcp_axis_offsets
-try_next_grasp_candidate
-slow_down_close
+slow_preclose_align
+fine_align_retries
+relax_final_gate
 ```
 
 随后 candidate search 不改程序结构，只改变高层 primitive 参数，例如：
 
 ```text
-candidate_indices:              0        -> 1,2 或 1,2,3
-grasp_tcp_axis_offsets_m:        0.0      -> 0.0,0.004,0.008,0.012
-reobserve_at_precontact:         0        -> 1
+candidate_indices:              1        -> 1,2
+final_tcp_threshold:             0.002    -> 0.035
+final_ori_threshold:             0.010    -> 0.35
+insert_max_joint_step:           faster   -> 0.006
+fine_align_retries:              low      -> 2
+hold / insert_hold_steps:        lower    -> 4 / 10
 place_descent_waypoints:         1        -> 4
-place_orientation_source:        grasp    -> post_lift_current
 ```
 
-这些候选会先在 debug seed 中比较，再把较好的候选放到 held-out validation seed 上验证。当前记录中的候选过程从失败和半成功策略推进到最终 `repair_place_keep_lift_orientation_v1` 的 3/3 validation。这个结果说明参数级修复已经能完成可复验的失败归因和策略筛选，但还不是完整 ASPIRE 的代码级 skill 自修改。
+这些候选会先在 debug seed 中比较，再把较好的候选放到 held-out validation seed 上验证。当前记录中的候选过程从 baseline 1/3 推进到 `llm_slow_preclose_align` 的 debug 3/3 和 validation 3/3。这个结果说明参数级修复已经能完成可复验的失败归因和策略筛选，但还不是完整 ASPIRE 的代码级 skill 自修改。
 
 ## ASPIRE-lite 当前实现
 
@@ -223,43 +231,46 @@ place_orientation_source:        grasp    -> post_lift_current
 当前记录到的候选搜索过程：
 
 ```text
-controlled_failure_fast_no_reobserve: 0/1
-repair_validated_relaxed_preclose_v2: 1/2
-stable_rgbd_v1: 2/4
-repair_place_keep_lift_orientation_v1: 3/3 validation
+controlled_failure_strict_reach_gate baseline: 1/3 debug
+llm_try_more_ranked_grasps:                   2/3 debug
+llm_slow_preclose_align:                      3/3 debug, selected best
+llm_enable_guarded_reobserve:                 1/3 debug
+llm_slow_preclose_align:                      3/3 held-out validation
 ```
 
 最终验证：
 
 ```text
 successes = 3/3
-avg_before_close_tcp_error_m = 0.0127 m
-avg_place_error_m = 0.0215 m
+avg_before_close_tcp_error_m = 0.0026 m
+avg_before_close_ori_error_rad = 0.0072 rad
+avg_place_error_m = 0.0284 m
 videos = 3
 trace_bundles = 3
 ```
 
-新增 LLM 自动候选生成的 plan-only 验证：
+新增 LLM 自动候选生成和真实 execute 验证：
 
 ```text
 script:
   scripts/propose_x2_aspire_skill_candidates.py
-  scripts/run_x2_aspire_llm_skill_evolution.py
+  scripts/run_x2_aspire_parameter_loop.py
 
 input report:
-  outputs/x2_aspire_candidate_search/aggregate_existing_20260701_after_validation/candidate_search_report.json
+  outputs/x2_aspire_parameter_loop/full_strict_gate_20260702_gpu/baseline/candidate_search_report.json
 
 Codex CLI generated candidates:
-  llm_retry_reachable_grasps
   llm_slow_preclose_align
-  llm_conservative_reobserve_slack
+  llm_try_more_ranked_grasps
+  llm_enable_guarded_reobserve
 
-candidate-search plan:
+candidate-search execute:
   3 debug seeds
   3 validation seeds
+  audit_ok = true
 ```
 
-真实 execute 还需要先启动 PyRoKi、Contact-GraspNet、OWL-ViT、SAM2 等服务；当前检查时这些服务未在本机端口上运行，因此本轮只完成了 LLM proposal 和 candidate-search plan 验证。
+真实 execute 已完成。服务证据保存在 `service_status.json`：SAM2、OWL-ViT、Contact-GraspNet 使用 cuda 服务，PyRoKi 为进程内调用。
 
 ### 与原 CaP-X 的差异
 

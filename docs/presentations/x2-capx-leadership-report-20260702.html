@@ -873,13 +873,14 @@
           </div>
           <div>
             <span class="video-label">实验 3 · ASPIRE-lite 修复策略验证</span>
-            <h3>不同 seed 下的修复策略验证</h3>
-            <p>该实验来自 <code>place_skip_redundant_prepose_3seed_20260701</code>。三个 validation seed 的目标方块位置和干扰物位置均有扰动，验证的是修复后的动作策略在小范围布局变化下是否仍能完成任务。</p>
+            <h3>从失败 trace 到参数级修复</h3>
+            <p>该实验来自 <code>full_strict_gate_20260702_gpu</code>。同一 RGB-D pick-place 任务先用固定 CaP-X baseline 跑 3 个 debug seed，再由 LLM 根据失败报告生成 3 组受约束参数候选。最终选中的 <code>llm_slow_preclose_align</code> 在 3 个 held-out validation seed 上全部完成任务。</p>
             <ul class="caption-list">
-              <li>trace 发现 place-pre 已到位后重复 IK move 会造成跳变。</li>
-              <li>修复为到位检测 + post-lift TCP orientation。</li>
-              <li>候选调试阶段出现过 <code>0/1</code>、<code>1/2</code>、<code>2/4</code> 等结果；最终针对 place 失败的修复策略在 3 个 validation seed 上达到 <strong>3/3</strong>。</li>
-              <li>最终平均抓取前 TCP 误差 1.27 cm，平均放置误差 2.15 cm。</li>
+              <li>baseline 在 debug seed 上只有 <strong>1/3</strong> 成功，两个失败均为 <code>preclose_pose_not_reached</code>。</li>
+              <li>trace 显示 IK 解算误差接近 0，失败主要来自闭爪前执行跟踪未满足过严的 2 mm / 0.01 rad 门限。</li>
+              <li>LLM 生成的候选只修改高层 primitive 白名单参数，不改底层控制器、视觉模型、IK 或 PyRoKi。</li>
+              <li><code>llm_slow_preclose_align</code> 将接近/插入动作放慢，增加 hold 和 fine-align，并把 final gate 放宽到可抓范围，因此 debug 从 <strong>1/3</strong> 提升到 <strong>3/3</strong>。</li>
+              <li>held-out validation 最终 <strong>3/3</strong>，平均抓取前 TCP 误差 <strong>2.64 mm</strong>，平均放置误差 <strong>2.84 cm</strong>。</li>
             </ul>
             <table class="seed-table">
               <thead>
@@ -893,21 +894,21 @@
               <tbody>
                 <tr>
                   <td>val_nominal_shift</td>
-                  <td>[0.318, -0.078, 0.921]</td>
-                  <td>[0.225, 0.035, 0.921]</td>
-                  <td>成功</td>
+                  <td>held-out 布局扰动</td>
+                  <td>目标靠近干扰物但保持可达</td>
+                  <td>成功，place error 4.44 cm</td>
                 </tr>
                 <tr>
                   <td>val_centered</td>
-                  <td>[0.305, -0.065, 0.921]</td>
-                  <td>[0.225, 0.045, 0.921]</td>
-                  <td>成功</td>
+                  <td>held-out 居中布局</td>
+                  <td>目标和干扰物相对位置变化</td>
+                  <td>成功，place error 2.05 cm</td>
                 </tr>
                 <tr>
                   <td>val_right_shift</td>
-                  <td>[0.342, -0.083, 0.921]</td>
-                  <td>[0.225, 0.025, 0.921]</td>
-                  <td>成功</td>
+                  <td>held-out 右偏布局</td>
+                  <td>目标位置偏移但仍在右臂工作空间内</td>
+                  <td>成功，place error 2.05 cm</td>
                 </tr>
               </tbody>
             </table>
@@ -929,23 +930,23 @@
             <tbody>
               <tr>
                 <td>失败 trace</td>
-                <td><code>before_close_tcp_error_m</code>、<code>before_close_ori_error_rad</code>、<code>selected_grasp_candidate</code>、<code>object_in_hand_after_close</code></td>
-                <td>判断机械臂是否已经接近抓取位姿，以及失败是否发生在闭爪之后。</td>
+                <td><code>preclose_pose_not_reached</code>、<code>before_close_tcp_error_m</code>、<code>before_close_ori_error_rad</code>、<code>preclose_joint_ok</code></td>
+                <td>判断失败集中在闭爪前位姿跟踪，而不是目标不可达或视觉检测缺失。</td>
               </tr>
               <tr>
                 <td>failure report</td>
-                <td><code>object_not_in_hand_after_close</code></td>
-                <td>说明主要问题不是没检测到目标，也不是 IK 完全不可达，而是闭爪后没有把物体夹住。</td>
+                <td><code>preclose_pose_not_reached</code></td>
+                <td>baseline 的两个失败 seed 都在闭爪前退出，IK FK 误差很小，说明需要处理执行跟踪和判定门限。</td>
               </tr>
               <tr>
                 <td>repair tags</td>
-                <td><code>increase_grasp_tcp_axis_offsets</code>、<code>try_next_grasp_candidate</code>、<code>slow_down_close</code></td>
-                <td>把失败原因转成可测试的修复方向。</td>
+                <td><code>slow_preclose_align</code>、<code>fine_align_retries</code>、<code>relax_final_gate</code></td>
+                <td>把“到位跟踪偏差”转成可测试的参数修复方向。</td>
               </tr>
               <tr>
                 <td>参数候选</td>
-                <td><code>candidate_indices</code>、<code>grasp_tcp_axis_offsets_m</code>、<code>reobserve_at_precontact</code>、<code>place_descent_waypoints</code>、<code>place_orientation_source</code></td>
-                <td>保持任务程序结构不变，只改变高层 primitive 的受控参数。</td>
+                <td><code>insert_max_joint_step</code>、<code>hold_steps</code>、<code>fine_align_retries</code>、<code>final_tcp_threshold</code>、<code>final_ori_threshold</code></td>
+                <td>保持任务程序结构不变，只改变高层 primitive 的受控参数，使末端慢速接近并允许在可抓容差内闭爪。</td>
               </tr>
               <tr>
                 <td>多 seed 验证</td>
@@ -954,7 +955,7 @@
               </tr>
             </tbody>
           </table>
-          <p>本轮记录中的候选过程从失败和半成功策略推进到 <code>repair_place_keep_lift_orientation_v1</code> 的 <strong>3/3 validation</strong>。这个结果说明参数级修复已经能完成可复验的失败归因和策略筛选，但还不是完整 ASPIRE 的代码级 skill 自修改。</p>
+          <p>本轮候选过程包含一个重要反例：<code>llm_enable_guarded_reobserve</code> 只成功 <strong>1/3</strong>，说明单纯启用重观测并不能解决执行跟踪和闭爪稳定性问题。最终被选中的 <code>llm_slow_preclose_align</code> 来自 baseline 失败 trace 的归因：它把“闭爪前到位失败”转化为减小 joint step、增加 hold/fine-align、放宽 final gate 的参数级整定，并在 held-out validation 上达到 <strong>3/3</strong>。这说明当前系统已经能完成可复验的失败归因和候选筛选，但还不是完整 ASPIRE 的代码级 skill 自修改。</p>
         </div>
       </div>
       <div class="callout">
@@ -978,7 +979,7 @@
         </div>
         <div class="card">
           <h3>验证效果</h3>
-          <p>人工候选过程已从失败和半成功策略推进到最终 3/3 validation。新增的 Codex CLI proposer 已能从旧 report 自动生成 3 个参数级候选，并进入 3 debug / 3 validation 的 candidate-search plan。</p>
+          <p>本轮完整 execute 已完成：固定 baseline 在 3 个 debug seed 上为 1/3，LLM 生成 3 个参数级候选，candidate search 自动选择 <code>llm_slow_preclose_align</code>，并在 3 个 held-out validation seed 上达到 3/3。</p>
         </div>
       </div>
       <ol class="process-list">
@@ -1003,7 +1004,7 @@
         </div>
         <div class="card">
           <h3>Validated repair</h3>
-          <p>发现 place-pre 已到位后重复 IK move 会导致末端跳走；修复为到位检测 + 使用 post-lift TCP orientation。候选调试中存在失败和半成功策略，最终修复策略在 3 个 validation seed 上全部通过。</p>
+          <p>baseline 失败集中在 <code>preclose_pose_not_reached</code>。选中的修复策略减慢接近/插入，增加 hold 和 fine-align，并放宽 final reach gate。候选调试中保留了退化策略作为反例，最终 best candidate 在 3 个 validation seed 上全部通过。</p>
         </div>
       </div>
       <table>
@@ -1018,21 +1019,21 @@
           <tr>
             <td>validation 成功率</td>
             <td><strong>3/3</strong></td>
-            <td>输出目录：<code>outputs/x2_aspire_candidate_search/place_skip_redundant_prepose_3seed_20260701/</code></td>
+            <td>输出目录：<code>outputs/x2_aspire_parameter_loop/full_strict_gate_20260702_gpu/</code></td>
           </tr>
           <tr>
             <td>候选搜索过程</td>
-            <td><strong>0/1 -> 1/2、2/4 -> 3/3</strong></td>
-            <td>早期失败候选包括 <code>object_not_in_hand_after_close</code> 和 <code>preclose_pose_not_reached</code>；最终修复针对 place 阶段跳变，验证成功率提升到 3/3。该对比来自受控候选搜索，不作为大样本统计结论。</td>
+            <td><strong>baseline 1/3 -> best debug 3/3 -> validation 3/3</strong></td>
+            <td>baseline 失败为 <code>preclose_pose_not_reached</code>；LLM 候选中 <code>llm_enable_guarded_reobserve</code> 退化到 1/3，<code>llm_try_more_ranked_grasps</code> 为 2/3，最终 <code>llm_slow_preclose_align</code> 在 debug 上 3/3。该对比来自受控候选搜索，不作为大样本统计结论。</td>
           </tr>
           <tr>
             <td>平均 before-close TCP 误差</td>
-            <td><strong>0.0127 m</strong></td>
-            <td>说明抓取闭合前末端基本到达视觉生成的抓取位姿。</td>
+            <td><strong>0.0026 m</strong></td>
+            <td>held-out validation 平均值；说明闭合夹爪前 TCP 已稳定进入可抓范围。</td>
           </tr>
           <tr>
             <td>平均放置误差</td>
-            <td><strong>0.0215 m</strong></td>
+            <td><strong>0.0284 m</strong></td>
             <td>桌面 pick-place 仿真任务可以稳定完成。</td>
           </tr>
           <tr>
@@ -1042,8 +1043,8 @@
           </tr>
           <tr>
             <td>LLM 自动候选生成</td>
-            <td><strong>plan-only 通过</strong></td>
-            <td><code>scripts/propose_x2_aspire_skill_candidates.py</code> 已用本机 Codex CLI 从历史 report 生成 3 个候选；<code>scripts/run_x2_aspire_llm_skill_evolution.py</code> 可一键串联 propose、candidate search 和 audit。真实仿真 execute 需要先启动 PyRoKi / GraspNet / OWL-ViT / SAM2 服务。</td>
+            <td><strong>execute 通过</strong></td>
+            <td><code>scripts/run_x2_aspire_parameter_loop.py</code> 已串联 baseline、LLM proposal、candidate search、held-out validation 和 audit。候选只使用白名单参数，不能改底层控制、视觉模型、IK 或 PyRoKi。</td>
           </tr>
         </tbody>
       </table>
