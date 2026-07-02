@@ -1,247 +1,169 @@
-# X2 接入 CaP-X/BEHAVIOR 汇报讲稿
+# 面向数据自进化的 X2-CaP-X 技能体系汇报提纲
 
 日期：2026-07-02
 
-## 建议汇报主线
+## 汇报主线
 
-建议不要按“我改了哪些文件”来讲，而是按工程闭环讲：
+本阶段工作从 CaP-X 出发，目标是让 X2 进入 BEHAVIOR/CaP-X 任务体系，并进一步形成可积累、可诊断、可检索、可修复的 skill 数据闭环。
 
-1. 我从 CaP-X 出发，目标是让自己的 X2 机器人进入 BEHAVIOR/CaP-X 任务体系。
-2. 原始 CaP-X third_party BEHAVIOR 不适配当前 5090 环境，所以我先解决仿真底座。
-3. 仿真底座通了以后，又补齐自定义机器人导入、X2 夹爪安装、X2 任务 primitive。
-4. 然后把 X2 接进 CaP-X 的 LLM 代码注入模式，让 LLM 只调用高层任务 API。
-5. 最后在 ASPIRE 出来后，加入 trace、失败分类和 candidate search，使任务可以迭代调试。
+主线按六个阶段展开：
 
-一句话总结：
+1. 解决本机 RTX 5090 与 CaP-X bundled BEHAVIOR 的环境不匹配问题。
+2. 独立安装官网 BEHAVIOR 并适配 Isaac Sim 5.1。
+3. 修复该版本 BEHAVIOR 的自定义机器人导入 pipeline，并完成 main 与 patched main 的烟测。
+4. 为 X2 增加 85 型欠驱动夹爪，注册带爪/不带爪版本，使其具备桌面操作条件。
+5. 在 CaP-X-b1k 中封装 X2 视觉与动作 primitive，让任务代码通过高层 API 调用 X2。
+6. 引入 ASPIRE-lite 的 trace、failure taxonomy、candidate search 和 validation seed，为后续数据驱动的 skill 检索与扩展做准备。
 
-> 这项工作不是单个抓取 demo，而是把 X2 从环境适配、机器人建模、动作/视觉原语、CaP-X 代码注入，到 ASPIRE-like 调试闭环打通了一遍。
+## 当前系统状态
 
-## 3 分钟版
+X2 已能在 BEHAVIOR/Isaac Sim 5.1 中加载、运动、闭合夹爪，并通过 CaP-X 高层 primitive 完成桌面 pick-place。
 
-### 1. 背景和问题
-
-最初目标是在 CaP-X 的 BEHAVIOR 环境里导入 X2 机器人。但很快发现 CaP-X 自带的 BEHAVIOR 包不适合当前电脑的 5090 显卡配置。
-
-因此我转向独立安装官网 BEHAVIOR，并适配 Isaac Sim 5.1。这个环境能适配 5090，但新的 BEHAVIOR 版本在自定义机器人导入 pipeline 上有问题。我修了这个问题，对官方 main 和修改后的 main 都做了烟测，并提交了修复分支。
-
-### 2. 让 X2 具备做任务的能力
-
-X2 原始机器人模型不能直接完成桌面抓取任务，因为缺少可用夹爪。我参考官方 Franka + 85 型欠驱动夹爪的例子，写了 X2 安装夹爪脚本，并注册了带爪和不带爪两个版本。
-
-这一步之后，X2 才从“能加载”变成“能干活”。
-
-### 3. 接入 CaP-X
-
-我形成了 `CaP-X-b1k` 分支。这里的关键不是让 LLM 写一大段仿真控制脚本，而是让环境和任务 setup 留在 config/env 层，LLM 只调用高层 primitive。
-
-当前暴露给任务代码的核心接口是：
+核心任务级 primitive：
 
 ```python
-pick_and_place_visual_object(...)
+pick_and_place_visual_object(
+    object_name="blue cube",
+    target_name="right target",
+    obstacle_source="rgbd_visual",
+    place_offset_source="visual_grasp_pose",
+    reobserve_at_precontact=True,
+)
 ```
 
-内部会完成视觉、抓取位姿、障碍物估计、轨迹接近、关节 IK、夹爪闭合、转运、放置。
-
-### 4. 当前结果
-
-已经跑通：
-
-- X2 CaP-X two-target pick-place。
-- two-object blue cube pick-place。
-- RGB-D visual route：用视觉分割、深度点云和 Contact-GraspNet 产生抓取位姿。
-- ASPIRE-lite validation：3 个验证场景全部成功。
-
-最新指标：
+该接口内部串联：
 
 ```text
-successes=3/3
-avg_before_close_tcp_error_m=0.0127 m
-avg_before_close_ori_error_rad=0.0421 rad
-avg_place_error_m=0.0215 m
+OWL-ViT target detection
+-> SAM2 target segmentation
+-> RGB-D point cloud object/table estimation
+-> Contact-GraspNet TCP grasp generation
+-> PyRoKi / joint IK approach and transfer
+-> gripper close / lift / place / release
+-> trace / metrics / failure report
 ```
 
-## 8 分钟版
-
-### 第 1 页：目标
-
-我的目标是把自研 X2 机器人导入 CaP-X/BEHAVIOR 体系，使它能在 CaP-X 的代码注入框架下完成操作任务。
-
-这里有三个层次：
-
-- 底层：X2 能在 BEHAVIOR/Isaac Sim 5.1 正确加载和控制。
-- 中层：X2 有夹爪、视觉、IK、规划、抓取和放置能力。
-- 上层：CaP-X / LLM 不需要关心场景搭建，只调用任务级 primitive。
-
-### 第 2 页：为什么先做 BEHAVIOR/Isaac 适配
-
-CaP-X 自带的 BEHAVIOR third_party 包不适配当前 5090 环境。独立安装官网 BEHAVIOR 后，Isaac Sim 5.1 可以运行，但自定义机器人导入 pipeline 有问题。
-
-我做了：
-
-- 修复自定义机器人导入链路。
-- 对官方 main 做烟测，确认不是环境本身坏了。
-- 对修改后的 main 做烟测，确认补丁有效。
-- 提交了修复分支。
-
-本地提交：
-
-```text
-0f6705681 Fix custom robot import for Isaac Sim 5.1
-```
-
-### 第 3 页：X2 机器人补齐任务能力
-
-X2 原始模型只解决“机器人存在”的问题，不解决“机器人能抓东西”的问题。为了做 pick-place，我参考官方 Franka 例子，给 X2 增加 85 型欠驱动夹爪，并注册了两个版本：
-
-- X2 without gripper
-- X2 with gripper
-
-这一步是后续所有任务的基础。
-
-### 第 4 页：CaP-X-b1k 的设计原则
-
-我没有把仿真 setup 写进 LLM 生成代码里，而是保持 CaP-X 原本的思路：
-
-- 场景、机器人、物体、相机、任务目标放在 config/env 层。
-- LLM 只拿到少量高层 API。
-- 低层视觉和动作细节由 X2 API 内部封装。
-
-核心 task-level primitive：
-
-```python
-pick_and_place_visual_object(...)
-```
-
-### 第 5 页：视觉到动作的链路
-
-当前 RGB-D route 是：
-
-```text
-OWL-ViT 目标检测
--> SAM2 目标分割
--> RGB-D 点云估计目标和桌面障碍物
--> Contact-GraspNet 生成抓取 TCP 位姿
--> PyRoKi / IK 规划接近
--> joint IK 执行
--> gripper close
--> lift / transfer / place / release
-```
-
-重要坐标契约：
+关键坐标契约：
 
 ```text
 视觉输出：T_world_tcp
 动作输入：T_world_tcp
 ```
 
-LLM 不需要自己处理 TCP/EEF 转换。
+## 实验 1：X2 夹爪与低级动作验证
 
-### 第 6 页：ASPIRE-lite 做了什么
-
-ASPIRE 之后，我没有说已经完整复现论文，而是先做了工程上有价值的 ASPIRE-like 子集：
-
-- trace bundle：记录代码、primitive 调用、视觉产物、运动 waypoint、视频。
-- failure taxonomy：把失败分成检测失败、分割失败、抓取不可达、接近失败、没夹住、放置失败等。
-- skill library：把有效策略记录下来。
-- candidate search：对高层 primitive 参数做受控搜索。
-
-这让失败调试从“看视频猜原因”变成“有 trace 和指标支撑”。
-
-### 第 7 页：一个具体修复案例
-
-最近的失败点在 place 阶段：
-
-- 机械臂抓起物体后，转运过程中其实已经到达 `place_pre_tcp_pose`。
-- 原代码又重复发一次到同一个 place-pre pose 的 IK move。
-- 这个冗余动作偶发导致末端跳走约 10 cm。
-
-修复：
-
-- 到位后跳过冗余 place-pre IK move。
-- 使用 `place_orientation_source=post_lift_current`，保持抓起后已经稳定的 TCP 姿态去放置。
-
-验证结果：
+材料：
 
 ```text
-validation successes=3/3
-avg_before_close_tcp_error_m=0.0127 m
-avg_place_error_m=0.0215 m
+docs/presentations/assets/x2_gripper_motion_primitives.mp4
 ```
 
-### 第 8 页：当前边界
+展示内容：
 
-需要讲清楚：
+- X2 带 85 型欠驱动夹爪版本可以在 BEHAVIOR/Isaac Sim 中加载。
+- 机械臂可以执行末端位姿变化。
+- 夹爪可以闭合和打开。
 
-- CaP-X 仿真任务链路已经打通。
-- RGB-D route 已经比早期 oracle route 更接近 real。
-- ASPIRE-lite 的 trace/failure/candidate/validation 骨架已经有了。
+该实验支撑机器人接入和动作 primitive 的基础可用性。
 
-但不要说过头：
+## 实验 2：RGB-D 视觉 primitive 到机器人执行
 
-- 还不是完整 ASPIRE 论文级复现。
-- 还没有完成真实机器人闭环。
-- 仍有部分评估信号来自仿真，例如 reward、task_completed、place_error。
-
-### 第 9 页：下一步
-
-建议下一步分三条线：
-
-1. 固化当前稳定基线：tag、README、视频证据。
-2. 补一个严格 ASPIRE-style 单报告：多候选 debug + controlled failure + best candidate + 3-seed validation。
-3. 推进 x2-agent-lab 实物部署：相机标定、TCP/EEF 标定、ROS trajectory/action、真实安全策略。
-
-## 建议现场播放的视频
-
-### 1. CaP-X high-level primitive 任务
+材料：
 
 ```text
-docs/presentations/assets/x2_two_target_codex_a.mp4
-```
-
-讲法：这个视频说明 X2 已经在 CaP-X 高层 primitive 下完成任务，不是手写 env setup 脚本。
-
-### 2. RGB-D visual route
-
-```text
+docs/presentations/assets/x2_visual_rgb.png
+docs/presentations/assets/x2_visual_detection_overlay.png
+docs/presentations/assets/x2_visual_sam2_mask_overlay.png
 docs/presentations/assets/x2_rgbd_codex_a.mp4
 ```
 
-讲法：这个视频说明视觉、抓取位姿、障碍物估计和动作执行已经串起来。
-
-### 3. ASPIRE-lite validation
+记录到的关键数据：
 
 ```text
-docs/presentations/assets/x2_aspire_validation.mp4
+pose_estimate.meaning = T_world_object estimated from SAM2 mask and RGB-D depth
+object_position_world = [0.3046, -0.0647, 0.9213] m
+graspnet_candidate_count = 48
+grasp_tcp_position_world = [0.3068, -0.0656, 0.9240] m
+grasp_tcp_quat_xyzw_world = [0.4899, 0.6940, 0.3302, -0.4114]
+before_close_tcp_error_m = 0.0111 m
+before_close_ori_error_rad = 0.0340 rad
 ```
 
-讲法：这个视频说明经过 trace/candidate 调试后的策略可以在验证场景里稳定完成。
+解释口径：
 
-## 关键材料
+- 视觉链路不只输出 mask，还输出可接入动作 primitive 的 TCP 抓取位姿。
+- 机器人闭合夹爪前的 TCP 误差约 1.1 cm，说明动作执行基本到达视觉生成的抓取位姿。
+- RGB-D route 已经减少早期 oracle obstacle route 的仿真真值依赖，但 reward、task_completed、place_error 等评估信号仍来自仿真。
 
-GitHub Pages 入口：
+## 实验 3：ASPIRE-lite 修复策略验证
+
+材料：
 
 ```text
-docs/index.html
+docs/presentations/assets/x2_aspire_val_nominal_shift.mp4
+docs/presentations/assets/x2_aspire_val_centered.mp4
+docs/presentations/assets/x2_aspire_val_right_shift.mp4
 ```
 
-网页汇报：
+三个 validation seed：
 
 ```text
-docs/presentations/x2-capx-leadership-report-20260702.html
+val_nominal_shift:
+  target    = [0.318, -0.078, 0.921]
+  distractor= [0.225,  0.035, 0.921]
+
+val_centered:
+  target    = [0.305, -0.065, 0.921]
+  distractor= [0.225,  0.045, 0.921]
+
+val_right_shift:
+  target    = [0.342, -0.083, 0.921]
+  distractor= [0.225,  0.025, 0.921]
 ```
 
-状态文档：
+候选搜索过程中的成功率变化：
 
 ```text
-docs/x2-capx-integration-status.md
-docs/x2-aspire-lite-minimal-replication.md
-docs/x2-rgbd-visual-obstacle-upgrade-20260630.md
+controlled_failure_fast_no_reobserve: 0/1
+repair_validated_relaxed_preclose_v2: 1/2
+stable_rgbd_v1: 2/4
+repair_place_keep_lift_orientation_v1: 3/3 validation
 ```
 
-代码入口：
+最终验证指标：
 
 ```text
-capx/integrations/x2/control.py
-capx/integrations/x2/aspire.py
-scripts/run_x2_aspire_rgbd_candidate_search.py
+successes = 3/3
+avg_before_close_tcp_error_m = 0.0127399412
+avg_before_close_ori_error_rad = 0.0420904692
+avg_place_error_m = 0.0215318505
+trace_bundles = 3
+videos = 3
+rgbd_obstacles_sim_truth = False
 ```
+
+解释口径：
+
+- 该结果属于受控候选搜索中的工程验证，不能等同于大样本统计评测。
+- 早期候选暴露出 `object_not_in_hand_after_close`、`preclose_pose_not_reached`、place 阶段跳变等问题。
+- 最终修复策略使用 `post_lift_current` 作为 place orientation，并在 place-pre 已到位时跳过冗余 IK move。
+- 修复后在三个 held-out validation seed 上均完成任务。
+
+## ASPIRE-lite 当前实现
+
+当前实现覆盖以下组件：
+
+- trace bundle：保存生成代码、primitive 调用、视觉产物、抓取候选、运动 waypoint、误差指标、视频。
+- failure taxonomy：将失败归类到检测、分割、深度点云、抓取不可达、preclose 未到达、未夹住、放置误差等类别。
+- skill candidate search：围绕高层 primitive 参数搜索候选策略，包括 grasp candidate、TCP offset、reobserve、place descent、place orientation。
+- validation seed：将候选策略放到不同目标/干扰物布局下验证。
+- evidence report：把结果写成 `candidate_search_report.json`、`findings.md`、视频和 trace bundle。
+
+完整 ASPIRE 论文级自动技能发现闭环仍属于后续工作；当前阶段完成的是可复现实验骨架和工程证据链。
+
+## 后续工作
+
+1. 固化当前稳定版本：tag、README、Pages 汇报和视频证据保持同步。
+2. 增加更系统的 ASPIRE-style 单报告：同一报告内包含多候选 debug、controlled failure、best candidate、3-seed validation。
+3. 扩展任务集：多物体、多目标、多摆放区域和更多失败恢复策略。
+4. 推进 x2-agent-lab 实物桥接：相机标定、TCP/EEF 标定、ROS trajectory/action、安全停止。
