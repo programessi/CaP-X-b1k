@@ -99,7 +99,7 @@ before_close_ori_error_rad = 0.0340 rad
 
 ## 实验 3：ASPIRE-lite 修复策略验证
 
-材料：
+材料：三条视频均为本轮 validation 的全局视角，便于观察桌面、方块和机械臂整体运动。
 
 ```text
 docs/presentations/assets/x2_aspire_val_nominal_shift.mp4

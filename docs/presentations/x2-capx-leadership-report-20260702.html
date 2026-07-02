@@ -874,7 +874,7 @@
           <div>
             <span class="video-label">实验 3 · ASPIRE-lite 修复策略验证</span>
             <h3>从失败 trace 到参数级修复</h3>
-            <p>该实验来自 <code>full_strict_gate_20260702_gpu</code>。同一 RGB-D pick-place 任务先用固定 CaP-X baseline 跑 3 个 debug seed，再由 LLM 根据失败报告生成 3 组受约束参数候选。最终选中的 <code>llm_slow_preclose_align</code> 在 3 个 held-out validation seed 上全部完成任务。</p>
+            <p>该实验来自 <code>full_strict_gate_20260702_gpu</code>。同一 RGB-D pick-place 任务先用固定 CaP-X baseline 跑 3 个 debug seed，再由 LLM 根据失败报告生成 3 组受约束参数候选。最终选中的 <code>llm_slow_preclose_align</code> 在 3 个 held-out validation seed 上全部完成任务；下方视频使用全局视角，便于观察桌面、方块和机械臂整体运动。</p>
             <ul class="caption-list">
               <li>baseline 在 debug seed 上只有 <strong>1/3</strong> 成功，两个失败均为 <code>preclose_pose_not_reached</code>。</li>
               <li>trace 显示 IK 解算误差接近 0，失败主要来自闭爪前执行跟踪未满足过严的 2 mm / 0.01 rad 门限。</li>
